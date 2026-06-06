@@ -33,7 +33,6 @@ app/build/
 иконка_cleaned.png
 
 # Native libraries (rebuild via build-go.sh / build-native.bat)
-app/src/main/jniLibs/**/*.so
 
 # Source icon asset
 иконка.png
