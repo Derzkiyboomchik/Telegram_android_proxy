@@ -202,6 +202,10 @@ fun ConnectionTab(settingsStore: SettingsStore) {
                 .weight(1f),
             contentAlignment = Alignment.Center
         ) {
+            ChatBackground(
+                isActive = isActiveVisual,
+                modifier = Modifier.fillMaxSize()
+            )
             AppSectionCard(
                 modifier = Modifier
                     .fillMaxWidth()
