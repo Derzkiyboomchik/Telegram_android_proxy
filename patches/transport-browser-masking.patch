@@ -1,0 +1,74 @@
+--- a/src/transport.go
++++ b/src/transport.go
+@@ -24,18 +24,37 @@ func dialWS(targetIP, domain string, timeout time.Duration) (*websocket.Conn, *h
+ 	u := url.URL{Scheme: "wss", Host: domain, Path: "/apiws"}
+ 	dialer := websocket.Dialer{
+ 		HandshakeTimeout: timeout,
+ 		Subprotocols:     []string{"binary"},
+ 		TLSClientConfig: &tls.Config{
+ 			ServerName:         domain,
+ 			InsecureSkipVerify: true,
++			MinVersion:         tls.VersionTLS12,
++			CipherSuites: []uint16{
++				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
++				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
++				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
++				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
++				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
++				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
++				tls.TLS_AES_128_GCM_SHA256,
++				tls.TLS_AES_256_GCM_SHA384,
++				tls.TLS_CHACHA20_POLY1305_SHA256,
++			},
+ 		},
+ 		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+-			d := &net.Dialer{Timeout: timeout}
++			d := &net.Dialer{
++				Timeout:   timeout,
++				KeepAlive: 30 * time.Second,
++			}
+ 			return d.DialContext(ctx, "tcp", net.JoinHostPort(targetIP, "443"))
+ 		},
+ 	}
+ 	headers := http.Header{}
+ 	headers.Set("Host", domain)
+ 	headers.Set("Origin", "https://web.telegram.org")
++	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
++	headers.Set("Accept-Language", "en-US,en;q=0.9")
++	headers.Set("Sec-WebSocket-Extensions", "permessage-deflate; client_max_window_bits")
++	headers.Set("Cache-Control", "no-cache")
++	headers.Set("Pragma", "no-cache")
+ 	return dialer.Dial(u.String(), headers)
+ }
+ 
+@@ -263,12 +282,21 @@ func dialWSByDomain(domain string, timeout time.Duration) (*websocket.Conn, *htt
+ 	dialer := websocket.Dialer{
+ 		HandshakeTimeout: timeout,
+ 		Subprotocols:     []string{"binary"},
+ 		TLSClientConfig: &tls.Config{
+ 			ServerName:         domain,
+ 			InsecureSkipVerify: true,
++			MinVersion:         tls.VersionTLS12,
++			CipherSuites: []uint16{
++				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
++				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
++				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
++				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
++				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
++				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
++				tls.TLS_AES_128_GCM_SHA256,
++				tls.TLS_AES_256_GCM_SHA384,
++				tls.TLS_CHACHA20_POLY1305_SHA256,
++			},
+ 		},
+ 	}
+ 	headers := http.Header{}
+ 	headers.Set("Host", domain)
+ 	headers.Set("Origin", "https://web.telegram.org")
++	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
++	headers.Set("Accept-Language", "en-US,en;q=0.9")
++	headers.Set("Sec-WebSocket-Extensions", "permessage-deflate; client_max_window_bits")
++	headers.Set("Cache-Control", "no-cache")
++	headers.Set("Pragma", "no-cache")
+ 	return dialer.Dial(u.String(), headers)
+ }

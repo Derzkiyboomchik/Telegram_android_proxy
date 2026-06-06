@@ -1,0 +1,39 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+captures
+.externalNativeBuild
+.cxx
+local.properties
+*.apk
+*.aab
+app/src/main/assets/bin/**/*
+!app/src/main/assets/bin/.gitkeep
+
+# Android Studio
+.idea/
+*.iml
+
+# Build outputs
+app/build/
+/build/
+
+# OS
+.DS_Store
+
+# Temp files
+иконка_cleaned.png
+
+# Native libraries (rebuild via build-go.sh / build-native.bat)
+app/src/main/jniLibs/**/*.so
+
+# Source icon asset
+иконка.png

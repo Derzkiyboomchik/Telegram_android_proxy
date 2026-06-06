@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TG WS Proxy</string>
+    <string name="channel_name">Proxy Service</string>
+    <string name="channel_description">Foreground service for TG WS Proxy</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_error">Error</string>
+    <string name="ip_address">IP Address</string>
+    <string name="port">Port</string>
+    <string name="secret">Secret</string>
+    <string name="copy_link">Copy link</string>
+    <string name="open_in_telegram">Open in Telegram</string>
+    <string name="logs">Logs</string>
+    <string name="settings">Settings</string>
+    <string name="general">General</string>
+    <string name="connection">Connection</string>
+    <string name="advanced">Advanced</string>
+    <string name="clear_logs">Clear</string>
+    <string name="save_logs">Save</string>
+    <string name="auto_start">Auto-start on boot</string>
+    <string name="use_cf_proxy">Cloudflare CDN fallback</string>
+    <string name="anti_blocking">Anti-blocking (auto domain + DoH)</string>
+    <string name="change_secret">Change secret (32 hex)</string>
+    <string name="change_port">Change port</string>
+    <string name="fake_tls_domain">Fake TLS domain</string>
+    <string name="cf_proxy_domains">CF Proxy domains</string>
+    <string name="log_level">Log level</string>
+    <string name="proxy_url_copied">Proxy link copied</string>
+    <string name="telegram_not_installed">Telegram is not installed</string>
+    <string name="telegram_beta_not_installed">Telegram Beta is not installed</string>
+    <string name="connection_details">Connection details</string>
+    <string name="logs_saved">Logs saved</string>
+    <string name="invalid_secret">Invalid secret (must be 32 hex chars)</string>
+    <string name="invalid_port">Invalid port</string>
+    <string name="home">Home</string>
+    <string name="save">Save</string>
+    <string name="regenerate">Generate</string>
+</resources>
