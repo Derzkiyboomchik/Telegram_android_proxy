@@ -25,16 +25,17 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
-	utls "github.com/refraction-networking/utls"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	utls "github.com/refraction-networking/utls"
 	"io"
 	"log"
 	"math"
+	randv2 "math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -944,7 +945,7 @@ func resolveDoH(ctx context.Context, domain string) string {
 
 	select {
 	case ip := <-resCh:
-		dohCache.Store(domain, dohCacheEntry{ip: ip, exp: time.Now().Add(5 * time.Minute)})
+		dohCache.Store(domain, dohCacheEntry{ip: ip, exp: time.Now().Add(15 * time.Minute)})
 		return ip
 	case <-dnsCtx.Done():
 		return ""
@@ -1118,8 +1119,11 @@ func wsConnectOnce(ctx context.Context, dialAddr, domain, path string, timeout t
 			"Sec-WebSocket-Key: %s\r\n"+
 			"Sec-WebSocket-Version: 13\r\n"+
 			"Sec-WebSocket-Protocol: binary\r\n"+
+			"Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n"+
 			"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "+
-			"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\r\n\r\n",
+			"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36\r\n"+
+			"Accept-Encoding: gzip, deflate, br\r\n"+
+			"Accept-Language: en-US,en;q=0.9\r\n\r\n",
 		path, domain, wsKey,
 	)
 
@@ -1641,10 +1645,65 @@ func (s *MsgSplitter) Split(chunk []byte) [][]byte {
 		return [][]byte{chunk}
 	}
 
+	// Fast path: no leftover ciphertext from a previous call. Parse packets
+	// directly from chunk and return cipher slices into chunk (zero-copy).
+	//
+	// NOTE: We avoid the per-call allocation of a separate `decrypted` buffer
+	// by reusing s.plainBuf's capacity. We intentionally do NOT call
+	// s.stream.XORKeyStream(chunk, chunk) (literal in-place decryption of the
+	// input), because that would destroy the ciphertext that we must return
+	// to the caller — Split()'s contract is to return ciphertext slices.
+	// Decrypting into a reusable plainBuf achieves the same allocation
+	// savings while preserving the cipher-text output contract.
+	if len(s.cipherBuf) == 0 {
+		// Decrypt chunk into reusable plainBuf (capacity reuse, no per-call alloc).
+		s.plainBuf = append(s.plainBuf[:0], chunk...)
+		s.stream.XORKeyStream(s.plainBuf, s.plainBuf)
+
+		var parts [][]byte
+		offset := 0
+		for offset < len(s.plainBuf) {
+			pktLen, _ := s.packetLenIn(s.plainBuf[offset:])
+			if pktLen < 0 {
+				// Not enough data for header or full payload: buffer the
+				// remaining tail (cipher copy into cipherBuf; plainBuf keeps
+				// the already-decrypted tail for the next call).
+				s.cipherBuf = append(s.cipherBuf[:0], chunk[offset:]...)
+				s.plainBuf = s.plainBuf[offset:]
+				break
+			}
+			if pktLen == 0 {
+				// Non-MTProto fallback: return the entire remaining buffer
+				// as a single cipher chunk and disable further splitting.
+				parts = append(parts, chunk[offset:])
+				s.cipherBuf = nil
+				s.plainBuf = nil
+				s.disabled = true
+				break
+			}
+			// Packet fully fits in chunk: return cipher slice from chunk
+			// without copying.
+			parts = append(parts, chunk[offset:offset+pktLen])
+			offset += pktLen
+		}
+		if offset >= len(s.plainBuf) {
+			// Everything consumed.
+			s.cipherBuf = nil
+			s.plainBuf = nil
+		}
+		if len(parts) == 0 {
+			return nil
+		}
+		return parts
+	}
+
+	// Slow path: there is leftover ciphertext from a previous call. Append
+	// the new chunk to cipherBuf (preserving cipher text) and decrypt the
+	// new portion into plainBuf (capacity reuse).
 	s.cipherBuf = append(s.cipherBuf, chunk...)
-	decrypted := make([]byte, len(chunk))
-	s.stream.XORKeyStream(decrypted, chunk)
-	s.plainBuf = append(s.plainBuf, decrypted...)
+	plainStart := len(s.plainBuf)
+	s.plainBuf = append(s.plainBuf, chunk...)
+	s.stream.XORKeyStream(s.plainBuf[plainStart:], s.plainBuf[plainStart:])
 
 	var parts [][]byte
 	for len(s.cipherBuf) > 0 {
@@ -1675,6 +1734,55 @@ func (s *MsgSplitter) Split(chunk []byte) [][]byte {
 		return nil
 	}
 	return parts
+}
+
+// packetLenIn returns (full packet length, header length) for the given data
+// slice, or (-1, 0) if there is not enough data to determine the length, or
+// (0, 0) for the non-MTProto fallback (protoTag not recognized).
+// Logic is identical to nextPacketLen(), but accepts a slice instead of
+// reading from s.plainBuf.
+func (s *MsgSplitter) packetLenIn(data []byte) (int, int) {
+	if len(data) == 0 {
+		return -1, 0
+	}
+	switch s.protoType {
+	case protoAbridged:
+		first := data[0] & 0x7F
+		var headerLen, payloadLen int
+		if first == 0x7F {
+			if len(data) < 4 {
+				return -1, 0
+			}
+			payloadLen = int(uint32(data[1])|uint32(data[2])<<8|uint32(data[3])<<16) * 4
+			headerLen = 4
+		} else {
+			payloadLen = int(first) * 4
+			headerLen = 1
+		}
+		if payloadLen <= 0 {
+			return 0, 0
+		}
+		pktLen := headerLen + payloadLen
+		if len(data) < pktLen {
+			return -1, 0
+		}
+		return pktLen, headerLen
+
+	case protoIntermediate, protoPaddedIntermediate:
+		if len(data) < 4 {
+			return -1, 0
+		}
+		payloadLen := int(binary.LittleEndian.Uint32(data[:4]) & 0x7FFFFFFF)
+		if payloadLen <= 0 {
+			return 0, 0
+		}
+		pktLen := 4 + payloadLen
+		if len(data) < pktLen {
+			return -1, 0
+		}
+		return pktLen, 4
+	}
+	return 0, 0
 }
 
 func (s *MsgSplitter) Flush() [][]byte {
@@ -1936,7 +2044,12 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 	var activityMu sync.Mutex
 
 	go func() {
-		ticker := time.NewTicker(bridgePingInterval)
+		const (
+			pingIntervalMin       = 15 * time.Second
+			pingIdleSendThreshold = 10 * time.Second
+		)
+		interval := bridgePingInterval // start at 30s
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -1946,10 +2059,22 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 				activityMu.Lock()
 				idle := time.Since(lastActivity)
 				activityMu.Unlock()
-				if idle > bridgePingInterval {
+				if idle > pingIdleSendThreshold {
 					if err := ws.SendPing(); err != nil {
 						cancel()
 						return
+					}
+					// Shrink interval when idle so dead connections are
+					// detected faster.
+					if interval > pingIntervalMin {
+						interval = pingIntervalMin
+						ticker.Reset(interval)
+					}
+				} else {
+					// Restore the normal interval once activity resumes.
+					if interval != bridgePingInterval {
+						interval = bridgePingInterval
+						ticker.Reset(interval)
 					}
 				}
 			}
@@ -2176,6 +2301,17 @@ func cfproxyFallback(ctx context.Context, conn net.Conn, relayInit []byte, label
 		if d != active {
 			ordered = append(ordered, d)
 		}
+	}
+
+	// Randomize the order of the non-active fallback domains so that, under
+	// load, clients distribute across fallbacks instead of all hammering the
+	// same first candidate.
+	if len(ordered) > 1 {
+		rest := ordered[1:]
+		randv2.Shuffle(len(rest), func(i, j int) {
+			rest[i], rest[j] = rest[j], rest[i]
+		})
+		ordered = append([]string{ordered[0]}, rest...)
 	}
 
 	mTag := mediaTag(isMedia)
