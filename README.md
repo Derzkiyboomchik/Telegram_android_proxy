@@ -2,183 +2,198 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Android-приложение (форк) для запуска TG WS Proxy прямо на устройстве. Использует Go-реализацию [tg-ws-proxy-go](https://github.com/spatiumstas/tg-ws-proxy-go) как встроенный нативный бинарник.
+Android-приложение для запуска TG WS Proxy прямо на устройстве. Проксирует MTProto-трафик Telegram через WebSocket (`wss://kws*.web.telegram.org/apiws`), обходя DPI-фильтрацию. При прямом WS недоступности автоматически переключается на Cloudflare-прокси или TCP-fallback.
+
+Встроенный Go-движок с CGO (JNI) обеспечивает нативную производительность. Приложение работает как VPN-подобный интерфейс с одной большой кнопкой включения/выключения.
+
+## Возможности
+
+- **Прямое WS-подключение** к Telegram DC с автоматическим MTProto-packet splitting
+- **uTLS browser fingerprinting** — Chrome / Firefox / Safari / Random (режимы 0–3) для обхода TLS-отпечатков
+- **Cloudflare-прокси fallback** — автоматическое переключение при блокировке WS с балансировкой доменов, кешированием списка из GitHub и exponential backoff при 429
+- **DoH-резолвинг** через Cloudflare, Google, Quad9, AdGuard (с кешированием 15 мин)
+- **Connection pooling** — пул предустановленных WS-соединений с периодическим probe (до 16 на DC)
+- **Fake TLS** (ee-secret) — маскирование прокси-трафика под TLS-соединение
+- **Адаптивный keepalive** — 30s → 15s при простое, восстановление при активности
+- **Quick Settings Tile** — включение/выключение из шторки
+- **Автозапуск** при загрузке устройства
+- **DataStore** — персистентное хранение настроек
+
+## Технический стек
+
+| Компонент | Технология |
+|---|---|
+| UI | Jetpack Compose, Material 3, Single-Activity |
+| Архитектура | MVVM (ViewModel + StateFlow) |
+| Навигация | Compose Navigation + BottomBar |
+| Фоновая работа | Foreground Service (`dataSync`) |
+| Хранение | DataStore Preferences |
+| Движок прокси | Go 1.24 (CGO/JNI, нативные `.so`) |
+| WS-библиотека | Кастомный `RawWebSocket` (без gorilla) |
+| TLS | `refraction-networking/utls` v1.8.2 |
+| Шрифты | Inter (Regular, Medium, Semibold, Bold) |
+| Локализация | Русский / English |
+| Min SDK | 24 (Android 7.0) |
+| Target SDK | 34 |
+
+## Оптимизации движка (последний коммит)
+
+- **O(N) MTProto splitting** — zero-copy парсинг пакетов без реаллокаций буфера
+- **Рандомизация CF-доменов** — `rand/v2.Shuffle` для равномерного распределения нагрузки
+- **Обновлённый WS handshake** — актуальный Chrome UA, `Sec-WebSocket-Extensions`, `Accept-Encoding/Language`
+- **DoH TTL 15 мин** — снижение задержки при CF fallback
+- **Адаптивный keepalive** — быстрое обнаружение мёртвых соединений без лишнего трафика
 
 ## Архитектура
 
-- **Single-Activity** с Jetpack Compose и Material 3
-- **MVVM**: ViewModel + StateFlow
-- **Compose Navigation** с BottomBar
-- **Foreground Service** (`dataSync`) для работы в фоне
-- **Quick Settings Tile** для быстрого включения/выключения
-- **DataStore** для хранения настроек
-- **Локализация**: Русский и Английский
+```
+┌─────────────────────────────────┐
+│         Telegram Client         │
+│   (MTProto over local proxy)    │
+└──────────────┬──────────────────┘
+               │ 127.0.0.1:1443
+               ▼
+┌─────────────────────────────────┐
+│      Go Proxy Engine (JNI)      │
+│                                 │
+│  ┌─────────┐  ┌──────────────┐  │
+│  │  WS     │  │  CF Proxy    │  │
+│  │  Direct │──│  Fallback    │  │
+│  └────┬────┘  └──────┬───────┘  │
+│       │              │          │
+│  ┌────┴──────────────┴──────┐   │
+│  │   Connection Pool        │   │
+│  │   (per-DC, probe, TTL)   │   │
+│  └──────────────────────────┘   │
+│                                 │
+│  ┌──────────┐  ┌─────────────┐  │
+│  │  DoH     │  │  Fake TLS  │  │
+│  │  4 prov. │  │  ee-secret │  │
+│  └──────────┘  └─────────────┘  │
+└─────────────────────────────────┘
+               │
+               ▼
+     wss://kws*.web.telegram.org
+     / CF proxy / TCP fallback
+```
 
-## Скриншоты
+## Экраны
 
-*Главный экран*: VPN-подобный интерфейс с большой круглой кнопкой Connect/Disconnect, статусом и карточкой конфигурации.
+| Таб | Описание |
+|---|---|
+| **Запуск** | Главная кнопка с логотипом Telegram, статус подключения, кнопки запуска Telegram/Beta, панель CF/Пул/Порт, ссылка на прокси |
+| **Настройки** | Порт, секрет, CF-прокси, пул, bypass-режим (uTLS), fake TLS, автовыгрузка, автозапуск, выбор палитры |
+| **Логи** | Терминальный лог событий с фильтрами INFO/ERROR/NULL, моноширинный шрифт, автоскролл |
 
-## Требования
+## Темы и палитры
 
-- Android 7.0+ (minSdk 24)
-- targetSdk 34 / compileSdk 34
-- Go 1.23+ (для сборки нативных бинарников)
-- Gradle 8.4+ (или Android Studio со встроенным Gradle)
-- Android Studio Hedgehog (2023.1.1) или новее
-- JDK 17
+- **System** — динамические цвета Material You (Android 12+)
+- **Indigo** — фиолетовая светлая / тёмная
+- **Espresso** — тёплая коричневая «раф на кокосовом молоке» / «эспрессо»
+- **Forest** — зелёная приглушённая
+- **Cyber** — тёмная неоновая «Telegram Neon» с `#2AABEE` акцентом
 
 ## Структура проекта
 
 ```
-├── app/
-│   ├── src/main/
-│   │   ├── assets/bin/<abi>/tg-ws-proxy   # Go-бинарники для Android ABIs
-│   │   ├── java/com/tgws/proxy/
-│   │   │   ├── App.kt
-│   │   │   ├── MainActivity.kt
-│   │   │   ├── data/
-│   │   │   │   ├── local/ProxyDataStore.kt
-│   │   │   │   └── repository/ProxyRepository.kt
-│   │   │   ├── di/AppModule.kt
-│   │   │   ├── service/ProxyForegroundService.kt
-│   │   │   ├── tile/ProxyTileService.kt
-│   │   │   ├── receiver/BootReceiver.kt
-│   │   │   ├── ui/
-│   │   │   │   ├── theme/
-│   │   │   │   ├── navigation/
-│   │   │   │   └── screens/
-│   │   │   └── viewmodel/ProxyViewModel.kt
-│   │   └── res/
-│   └── build.gradle.kts
-├── build-go.sh
-├── .github/workflows/build.yml
+├── app/src/main/
+│   ├── java/com/tgws/proxy/
+│   │   ├── App.kt                     # Application, DataStore init
+│   │   ├── MainActivity.kt            # Single Activity, navigation, bottom bar
+│   │   ├── ProxyController.kt         # Start/stop прокси, JNI-вызовы
+│   │   ├── ProxyService.kt            # Foreground service, notification
+│   │   ├── SettingsStore.kt           # DataStore обёртка
+│   │   ├── LogEntry.kt                # Модель лог-записи
+│   │   ├── BootReceiver.kt            # Автозапуск
+│   │   ├── ProxyTileService.kt        # Quick Settings tile
+│   │   ├── NativeProxy.kt             # JNI bridge
+│   │   └── ui/
+│   │       ├── Theme.kt               # 5 палитр, Inter типография, AppColors
+│   │       ├── ConnectionTab.kt       # Главная: кнопка, статус, Telegram launch
+│   │       ├── SettingsTab.kt         # Настройки: порты, CF, bypass, fake TLS
+│   │       ├── LogsTab.kt             # Терминальный лог
+│   │       ├── ChatBackground.kt      # Анимированные чат-пузыри на фоне
+│   │       ├── AppSectionCard.kt      # Переиспользуемая карточка с градиентом
+│   │       ├── FloatingToolbar.kt     # Плавающая панель статистики
+│   │       └── ExternalLinks.kt       # Ссылки на GitHub, донаты
+│   ├── jniLibs/
+│   │   ├── arm64-v8a/libtgwsproxy.so
+│   │   ├── armeabi-v7a/libtgwsproxy.so
+│   │   └── x86_64/libtgwsproxy.so
+│   └── res/
+│       ├── drawable/ic_telegram_logo.xml
+│       ├── font/inter_*.ttf
+│       └── ...
+├── tg-ws-proxy.go                     # Go-исходник движка (CGO, ~3100 строк)
+├── go.mod / go.sum
+├── build-go.sh                        # Кросс-компиляция Go → Android
+├── build-go-docker.ps1 / .bat         # Docker-сборка для Windows
 └── gradle/libs.versions.toml
 ```
 
-## Инструкция по сборке
+## Сборка
 
-### 1. Локальная сборка через Android Studio + Gradle
+### Предварительные требования
 
-#### Шаг 1: Клонируйте репозиторий
+- Go 1.24+
+- Android Studio Hedgehog (2023.1.1)+ / JDK 17
+- Gradle 8.4+
 
-```bash
-git clone <your-repo-url>
-cd tg-ws-proxy-android
-```
-
-#### Шаг 2: Сгенерируйте Gradle Wrapper (если отсутствует)
-
-Если в проекте нет `gradle/wrapper/gradle-wrapper.jar`, сгенерируйте его:
+### 1. Клонирование
 
 ```bash
-gradle wrapper --gradle-version 8.4
+git clone https://github.com/Derzkiyboomchik/Telegram_android_proxy.git
+cd Telegram_android_proxy
 ```
 
-Или используйте системный Gradle:
+### 2. Сборка Go-бинарников
+
+**Через Docker (рекомендуется):**
 
 ```bash
-gradle assembleDebug
-```
-
-#### Шаг 3: Соберите Go-бинарники
-
-##### Вариант A: Сборка через Docker (рекомендуется)
-
-На Windows используйте готовый скрипт:
-
-```powershell
 # PowerShell
 .\build-go-docker.ps1
-```
 
-Или через `cmd`:
-```cmd
-build-go-docker.bat
-```
-
-Или вручную одной строкой:
-```bash
-docker run --rm -v "$PWD:/workspace" -w /workspace golang:1.23-alpine sh -c "
-apk add --no-cache git bash &&
-bash ./build-go.sh
+# Linux / macOS
+docker run --rm -v "$PWD:/workspace" -w /workspace golang:1.24-alpine sh -c "
+  apk add --no-cache git bash &&
+  bash ./build-go.sh
 "
 ```
 
-> **Важно**: в репозитории `tg-ws-proxy-go` исходники находятся в папке `src/`. Скрипт `build-go.sh` автоматически переходит в неё перед сборкой.
-
-##### Вариант B: Сборка через локальный Go
+**Локальный Go:**
 
 ```bash
-# Убедитесь, что Go установлен (go version)
 ./build-go.sh
 ```
 
-##### Вариант C: Сборка через Android NDK (если нужен CGO)
+**Android NDK (CGO):**
 
 ```bash
 export ANDROID_NDK=/path/to/android-ndk
-
-# arm64-v8a
 CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" \
-CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -o app/src/main/assets/bin/arm64-v8a/tg-ws-proxy .
-
-# armeabi-v7a
-CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang" \
-CGO_ENABLED=1 GOOS=android GOARCH=arm go build -o app/src/main/assets/bin/armeabi-v7a/tg-ws-proxy .
-
-# x86_64
-CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang" \
-CGO_ENABLED=1 GOOS=android GOARCH=amd64 go build -o app/src/main/assets/bin/x86_64/tg-ws-proxy .
-
-# x86
-CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang" \
-CGO_ENABLED=1 GOOS=android GOARCH=386 go build -o app/src/main/assets/bin/x86/tg-ws-proxy .
+  CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -o app/src/main/jniLibs/arm64-v8a/libtgwsproxy.so .
 ```
 
-> **Примечание**: Поскольку `tg-ws-proxy-go` — чистый Go-проект без CGO, достаточно варианта A или B с `CGO_ENABLED=0`.
-
-#### Шаг 4: Откройте проект в Android Studio
-
-1. Запустите Android Studio
-2. Выберите **Open** → укажите папку проекта
-3. Дождитесь синхронизации Gradle
-4. Выберите конфигурацию запуска `app`
-5. Нажмите **Run** (Shift+F10) или соберите APK:
-   - **Debug**: `Build → Build Bundle(s) / APK(s) → Build APK(s)`
-   - **Release**: `Build → Generate Signed Bundle / APK...`
-
-#### Шаг 5: Сборка через командную строку
+### 3. Сборка APK
 
 ```bash
-# Debug APK
-./gradlew assembleDebug
-
-# Release APK (требуется подпись)
-./gradlew assembleRelease
+./gradlew assembleDebug    # Debug
+./gradlew assembleRelease  # Release (требуется keystore.properties)
 ```
 
-Готовые APK будут находиться в:
-- `app/build/outputs/apk/debug/app-debug.apk`
-- `app/build/outputs/apk/release/app-release-unsigned.apk`
+### 4. GitHub Actions
 
-### 2. Автоматическая сборка через GitHub Actions
+При пуше в `main` или теге `v*` автоматически собираются Go-бинарники и APK:
 
-В проекте настроен workflow `.github/workflows/build.yml`:
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-1. При пуше в `main` или создании тега `v*` автоматически:
-   - Собираются Go-бинарники для всех ABI
-   - Собираются Debug и Release APK
-   - APK загружаются как артефакты
+## Подписание Release APK
 
-2. Для создания Release с APK:
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-
-## Настройка подписи Release
-
-Для подписи Release APK создайте файл `app/keystore.properties`:
+Создайте `app/keystore.properties`:
 
 ```properties
 storeFile=../my-key.jks
@@ -187,50 +202,25 @@ keyAlias=yourKeyAlias
 keyPassword=yourKeyPassword
 ```
 
-И обновите `app/build.gradle.kts`:
+## Разрешения
 
-```kotlin
-val keystoreProperties = java.util.Properties().apply {
-    load(file("keystore.properties").inputStream())
-}
-
-android {
-    signingConfigs {
-        create("release") {
-            storeFile = file(keystoreProperties["storeFile"]!!)
-            storePassword = keystoreProperties["storePassword"] as String
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-```
-
-## Permissions
-
-Приложение запрашивает следующие разрешения:
-
-- `INTERNET` — работа прокси
-- `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` — фоновая работа
-- `POST_NOTIFICATIONS` — уведомление о работающем сервисе (Android 13+)
-- `RECEIVE_BOOT_COMPLETED` — автозапуск при загрузке
+| Permission | Назначение |
+|---|---|
+| `INTERNET` | Работа прокси |
+| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` | Фоновый сервис |
+| `POST_NOTIFICATIONS` | Уведомление (Android 13+) |
+| `RECEIVE_BOOT_COMPLETED` | Автозапуск |
 
 ## Quick Settings Tile
 
-После установки приложения добавьте плитку TG WS Proxy в шторку быстрых настроек:
-1. Раскройте шторку уведомлений
-2. Нажмите «Редактировать» (карандаш)
-3. Перетащите плитку TG WS Proxy в активную зону
+1. Раскройте шторку → «Редактировать» (карандаш)
+2. Перетащите **TG WS Proxy** в активную зону
 
 ## Лицензия
 
 MIT License. См. [LICENSE](LICENSE).
 
-Оригинальные репозитории:
-- [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) — оригинальная Node.js версия
+## Благодарности
+
+- [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) — оригинальная концепция WS-прокси для Telegram
 - [spatiumstas/tg-ws-proxy-go](https://github.com/spatiumstas/tg-ws-proxy-go) — Go-реализация движка
