@@ -109,7 +109,22 @@ fun UpdateSection() {
                 }
             }
         }
-        context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        // On Android 13+ (API 33+) we MUST specify RECEIVER_EXPORTED or
+        // RECEIVER_NOT_EXPORTED when registering a runtime receiver —
+        // otherwise registerReceiver() throws SecurityException and crashes
+        // the app. ACTION_DOWNLOAD_COMPLETE is a system broadcast, so we
+        // use RECEIVER_NOT_EXPORTED (we don't need other apps to talk to us).
+        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(
+                receiver,
+                filter,
+                Context.RECEIVER_NOT_EXPORTED,
+            )
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(receiver, filter)
+        }
         onDispose { context.unregisterReceiver(receiver) }
     }
 

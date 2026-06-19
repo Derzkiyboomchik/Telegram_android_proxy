@@ -9,6 +9,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -611,7 +612,6 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 title = "Версия",
                 subtitle = "${com.tgws.proxy.BuildConfig.VERSION_NAME} · MTProto over WebSocket",
                 accent = MaterialTheme.colorScheme.primary,
-                onClick = {},
             )
         }
 
@@ -628,25 +628,28 @@ private fun AboutRow(
     title: String,
     subtitle: String,
     accent: Color,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val isClickable = onClick != null
     val bg by animateColorAsState(
-        targetValue = if (isPressed && onClick != {}) accent.copy(alpha = 0.10f) else Color.Transparent,
+        targetValue = if (isPressed && isClickable) accent.copy(alpha = 0.10f) else Color.Transparent,
         animationSpec = tween(150),
         label = "about_bg",
     )
-    val clickable = if (onClick != {}) {
-        Modifier.background(bg)
-    } else {
-        Modifier.background(bg)
-    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(clickable)
+            .background(bg)
+            .then(
+                if (isClickable) Modifier.clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick!!,
+                ) else Modifier,
+            )
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
