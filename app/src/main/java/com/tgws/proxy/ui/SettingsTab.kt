@@ -5,25 +5,73 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VpnKey
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Workspaces
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,7 +100,7 @@ val telegramApps = listOf(
     "app.nicegram",
     "org.telegram.bgram",
     "cc.modery.cherrygram",
-    "io.github.nextalone.nagram"
+    "io.github.nextalone.nagram",
 )
 
 private fun generateRandomSecret(): String {
@@ -85,6 +133,110 @@ fun openTelegram(context: Context, url: String) {
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// Section header — used inside AppSectionCard to introduce a sub-group
+// ════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun SectionHeader(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val tokens = AppTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Surface(
+            shape = AppShapes.Small,
+            color = tokens.telegramBlue.copy(alpha = 0.14f),
+            modifier = Modifier.size(28.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tokens.telegramBlue,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = scheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Setting row with title + subtitle + trailing switch
+// ════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun SwitchSettingRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) scheme.primary else scheme.onSurface.copy(alpha = 0.35f),
+            modifier = Modifier.size(20.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) scheme.onSurface else scheme.onSurface.copy(alpha = 0.45f),
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
+    }
+}
+
+@Composable
+private fun SoftDivider() {
+    HorizontalDivider(
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+        modifier = Modifier.padding(vertical = 4.dp),
+    )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SettingsTab — grouped, with section headers and subtitles
+// ════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsTab(settingsStore: SettingsStore) {
@@ -122,7 +274,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
             CircularProgressIndicator(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp
+                strokeWidth = 2.dp,
             )
         }
         return
@@ -172,7 +324,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 dc1mText, dc2mText, dc3mText, dc4mText, dc5mText, dc203mText,
                 experimentalMode, portText, selectedPoolSize,
                 cfEnabled, customCfDomainEnabled, customCfDomain, secretKeyText,
-                bypassMode
+                bypassMode,
             )
         }
     }
@@ -196,7 +348,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
             dc4mText = dc4mText, onDc4mChange = { dc4mText = it; scheduleSave() },
             dc5mText = dc5mText, onDc5mChange = { dc5mText = it; scheduleSave() },
             dc203mText = dc203mText, onDc203mChange = { dc203mText = it; scheduleSave() },
-            onDismiss = { showIpSetupDialog = false }
+            onDismiss = { showIpSetupDialog = false },
         )
     }
 
@@ -204,290 +356,370 @@ fun SettingsTab(settingsStore: SettingsStore) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp),
     ) {
+        // Page header
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = "Настройки",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-        
+
+        // ══ Group 1: Подключение ══
         AppSectionCard {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            SectionHeader(
+                icon = Icons.Default.Public,
+                title = "Подключение",
+                subtitle = "Порт, DC-адреса, автозапуск",
+            )
+
+            OutlinedTextField(
+                value = portText,
+                onValueChange = { portText = it; scheduleSave() },
+                label = { Text("Порт локального прокси") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                shape = AppShapes.Large,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                ),
+            )
+
+            OutlinedButton(
+                onClick = { showIpSetupDialog = true },
+                enabled = !cfEnabled && !isRunning,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = AppShapes.Large,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline.copy(alpha = if (cfEnabled || isRunning) 0.2f else 0.5f),
+                ),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Text(
-                        "Подключение",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+                Icon(Icons.Default.Lan, null, Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (cfEnabled) "Адреса DC — авто (CF включён)" else "Настроить адреса DC",
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            SoftDivider()
+
+            SwitchSettingRow(
+                icon = Icons.Default.PowerSettingsNew,
+                title = "Автозапуск при включении",
+                subtitle = "Запускать прокси после загрузки устройства",
+                checked = autoStartOnBoot,
+                onCheckedChange = { enabled ->
+                    scope.launch { settingsStore.saveAutoStartOnBoot(enabled) }
+                },
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ══ Group 2: Обход блокировок ══
+        AppSectionCard {
+            SectionHeader(
+                icon = Icons.Default.Shield,
+                title = "Обход блокировок",
+                subtitle = "CloudFlare CDN, транспорт uTLS",
+            )
+
+            SwitchSettingRow(
+                icon = Icons.Default.Cloud,
+                title = "CloudFlare CDN",
+                subtitle = "Проксировать через домены CF",
+                checked = cfEnabled,
+                enabled = !isRunning,
+                onCheckedChange = {
+                    cfEnabled = it
+                    isDcAuto = it
+                    scheduleSave()
+                },
+            )
+
+            SoftDivider()
+
+            // Bypass mode dropdown
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    Icons.Default.Bolt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    "Транспорт",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            var bypassExpanded by remember { mutableStateOf(false) }
+            val bypassOptions = listOf(
+                "Классический" to 0,
+                "uTLS Chrome" to 1,
+                "uTLS Firefox" to 2,
+                "uTLS Рандомный" to 3,
+            )
+            ExposedDropdownMenuBox(
+                expanded = bypassExpanded,
+                onExpandedChange = { bypassExpanded = !bypassExpanded },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 OutlinedTextField(
-                    value = portText,
-                    onValueChange = { portText = it; scheduleSave() },
-                    label = { Text("Порт") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    modifier = Modifier.menuAnchor().fillMaxWidth().height(56.dp),
+                    readOnly = true,
+                    value = bypassOptions.first { it.second == bypassMode }.first,
+                    onValueChange = {},
+                    label = { Text("Режим TLS-маскировки") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bypassExpanded) },
+                    shape = AppShapes.Large,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
-                )
-                OutlinedButton(
-                    onClick = { showIpSetupDialog = true },
-                    enabled = !cfEnabled && !isRunning,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                     ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (cfEnabled || isRunning) 0.2f else 0.5f))
-                ) {
-                    Icon(Icons.Default.Settings, null, Modifier.size(20.dp))
-                    if (cfEnabled) {
-                        Spacer(Modifier.width(8.dp))
-                        Text("Авто (Включён CF)", fontWeight = FontWeight.SemiBold)
-                    } else {
-                        Spacer(Modifier.width(8.dp))
-                        Text("Настроить адреса DC", fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Layers, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Text(
-                        "Пул WS",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val poolOptions = listOf(2, 4, 6)
-                    poolOptions.forEach { size ->
-                        PoolChip(
-                            label = "$size",
-                            selected = selectedPoolSize == size,
-                            enabled = !isRunning,
-                            modifier = Modifier.weight(1f).height(48.dp)
-                        ) {
-                            selectedPoolSize = size
-                            scheduleSave()
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        Icons.Default.Settings, null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        "Режим обхода",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                var bypassExpanded by remember { mutableStateOf(false) }
-                val bypassOptions = listOf(
-                    "Классический" to 0,
-                    "uTLS Chrome" to 1,
-                    "uTLS Firefox" to 2,
-                    "uTLS Рандомный" to 3
                 )
-                ExposedDropdownMenuBox(
+                ExposedDropdownMenu(
                     expanded = bypassExpanded,
-                    onExpandedChange = { bypassExpanded = !bypassExpanded },
-                    modifier = Modifier.fillMaxWidth()
+                    onDismissRequest = { bypassExpanded = false },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    OutlinedTextField(
-                        modifier = Modifier.menuAnchor().fillMaxWidth().height(56.dp),
-                        readOnly = true,
-                        value = bypassOptions.first { it.second == bypassMode }.first,
-                        onValueChange = {},
-                        label = { Text("Транспорт") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bypassExpanded) },
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                        )
-                    )
-                    ExposedDropdownMenu(
-                        expanded = bypassExpanded,
-                        onDismissRequest = { bypassExpanded = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        bypassOptions.forEach { (label, value) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    bypassMode = value
-                                    bypassExpanded = false
-                                    scheduleSave()
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.VpnKey, null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        "Секретный ключ",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                OutlinedTextField(
-                    value = secretKeyText,
-                    onValueChange = {},
-                    readOnly = true,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                    trailingIcon = {
-                        IconButton(
+                    bypassOptions.forEach { (label, value) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
                             onClick = {
-                                val newKey = generateRandomSecret()
-                                secretKeyText = newKey
-                                scope.launch { settingsStore.saveSecretKey(newKey) }
+                                bypassMode = value
+                                bypassExpanded = false
                                 scheduleSave()
                             },
-                            enabled = !isRunning
-                        ) {
-                            Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Cloud, null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        "CloudFlare CDN",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Switch(
-                    checked = cfEnabled,
-                    onCheckedChange = {
-                        cfEnabled = it
-                        isDcAuto = it
-                        scheduleSave()
-                    },
-                    enabled = !isRunning
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.PowerSettingsNew, null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        "Автозапуск",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Switch(
-                    checked = autoStartOnBoot,
-                    onCheckedChange = { enabled ->
-                        scope.launch { settingsStore.saveAutoStartOnBoot(enabled) }
+                        )
                     }
-                )
+                }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ══ Group 3: Производительность ══
+        AppSectionCard {
+            SectionHeader(
+                icon = Icons.Default.Workspaces,
+                title = "Производительность",
+                subtitle = "Размер пула WebSocket-соединений",
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val poolOptions = listOf(2, 4, 6)
+                poolOptions.forEach { size ->
+                    PoolChip(
+                        label = "$size",
+                        selected = selectedPoolSize == size,
+                        enabled = !isRunning,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                    ) {
+                        selectedPoolSize = size
+                        scheduleSave()
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ══ Group 4: Секретный ключ ══
+        AppSectionCard {
+            SectionHeader(
+                icon = Icons.Default.VpnKey,
+                title = "Секретный ключ",
+                subtitle = "Уникальный идентификатор прокси",
+            )
+            OutlinedTextField(
+                value = secretKeyText,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = AppShapes.Large,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            val newKey = generateRandomSecret()
+                            secretKeyText = newKey
+                            scope.launch { settingsStore.saveSecretKey(newKey) }
+                            scheduleSave()
+                        },
+                        enabled = !isRunning,
+                    ) {
+                        Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                ),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ══ Group 5: Внешний вид ══
+        AppSectionCard {
+            SectionHeader(
+                icon = Icons.Default.Palette,
+                title = "Внешний вид",
+                subtitle = "Тема оформления приложения",
+            )
+            AppearanceHintRow(
+                text = "Тема, тёмный режим и палитра настраиваются через плавающую панель справа — нажмите на иконку палитры.",
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ══ Group 6: Ссылки ══
+        AppSectionCard {
+            SectionHeader(
+                icon = Icons.Default.Code,
+                title = "Ссылки",
+                subtitle = "Исходный код и поддержка проекта",
+            )
+            LinkRow(
+                icon = Icons.Default.Code,
+                title = "GitHub",
+                subtitle = "Исходный код проекта",
+                accent = AppTheme.colors.github,
+            ) {
+                openUrlInBrowser(context, "https://github.com/Derzkiyboomchik/Telegram_android_proxy")
+            }
+            SoftDivider()
+            LinkRow(
+                icon = Icons.Default.Favorite,
+                title = "Поддержать",
+                subtitle = "Поддержать разработчика",
+                accent = AppTheme.colors.donate,
+            ) {
+                openUrlInBrowser(context, "https://yoomoney.ru/to/4100116222954252")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Small UI atoms specific to SettingsTab
+// ════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun AppearanceHintRow(text: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapes.Medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Palette,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LinkRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isPressed by androidx.compose.foundation.interaction.collectIsPressedAsState(interactionSource)
+    val bg by animateColorAsState(
+        targetValue = if (isPressed) accent.copy(alpha = 0.10f) else Color.Transparent,
+        animationSpec = tween(150),
+        label = "link_bg",
+    )
+    Surface(
+        onClick = onClick,
+        shape = AppShapes.Medium,
+        color = bg,
+        interactionSource = interactionSource,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                shape = AppShapes.Small,
+                color = accent.copy(alpha = 0.14f),
+                modifier = Modifier.size(32.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onSurface,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -497,26 +729,55 @@ private fun PoolChip(
     selected: Boolean,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val tokens = AppTheme.colors
+    val container by animateColorAsState(
+        targetValue = when {
+            !enabled -> scheme.surfaceVariant.copy(alpha = 0.3f)
+            selected -> scheme.primary
+            else -> scheme.surfaceVariant
+        },
+        animationSpec = tween(200),
+        label = "pool_container",
+    )
+    val content by animateColorAsState(
+        targetValue = when {
+            !enabled -> scheme.onSurface.copy(alpha = 0.35f)
+            selected -> scheme.onPrimary
+            else -> scheme.onSurface
+        },
+        animationSpec = tween(200),
+        label = "pool_content",
+    )
+    val border by animateColorAsState(
+        targetValue = if (selected && enabled) tokens.neonCyan.copy(alpha = 0.55f)
+                      else scheme.outlineVariant.copy(alpha = 0.30f),
+        animationSpec = tween(200),
+        label = "pool_border",
+    )
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(24.dp),
-        modifier = modifier.height(48.dp),
+        shape = AppShapes.Large,
+        modifier = modifier,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        )
+            containerColor = container,
+            contentColor = content,
+        ),
+        border = BorderStroke(1.dp, border),
     ) {
         Text(
             label,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
         )
     }
 }
 
-
+// ════════════════════════════════════════════════════════════════════════════
+// DC IP setup dialog — preserved as-is in behaviour, restyled
+// ════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun IpSetupDialog(
@@ -534,7 +795,7 @@ private fun IpSetupDialog(
     dc4mText: String, onDc4mChange: (String) -> Unit,
     dc5mText: String, onDc5mChange: (String) -> Unit,
     dc203mText: String, onDc203mChange: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     val onIpChange = { newValue: String, update: (String) -> Unit ->
         if (newValue.all { it.isDigit() || it == '.' }) {
@@ -544,27 +805,27 @@ private fun IpSetupDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = AppShapes.XLarge,
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp,
+            tonalElevation = AppElevation.Level3,
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .wrapContentHeight()
-                .heightIn(max = 560.dp)
+                .heightIn(max = 560.dp),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
                     "Адреса датацентров",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
 
                 @Composable
@@ -574,7 +835,7 @@ private fun IpSetupDialog(
                             label,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
                         )
                         OutlinedTextField(
                             value = value,
@@ -582,11 +843,11 @@ private fun IpSetupDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().height(52.dp),
-                            shape = RoundedCornerShape(24.dp),
+                            shape = AppShapes.Large,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            )
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                            ),
                         )
                     }
                 }
@@ -596,7 +857,7 @@ private fun IpSetupDialog(
                         .fillMaxWidth()
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (isExperimental) {
                         dcInput("DC1", dc1Text, onDc1Change)
@@ -625,23 +886,23 @@ private fun IpSetupDialog(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         "Экспериментальный режим",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                     Switch(
                         checked = isExperimental,
-                        onCheckedChange = onExperimentalChange
+                        onCheckedChange = onExperimentalChange,
                     )
                 }
 
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(24.dp)
+                    shape = AppShapes.Large,
                 ) {
                     Text("Готово", fontWeight = FontWeight.SemiBold)
                 }

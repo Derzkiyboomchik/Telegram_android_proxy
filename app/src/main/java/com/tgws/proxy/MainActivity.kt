@@ -13,10 +13,16 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -97,36 +103,45 @@ class MainActivity : ComponentActivity() {
             }
 
             TgWsProxyTheme(themeMode = themeMode, dynamicColor = isDynamicColor, themePalette = themePalette) {
-                androidx.compose.runtime.CompositionLocalProvider(
-                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
-                        density = androidx.compose.ui.platform.LocalDensity.current.density,
-                        fontScale = 1f
-                    )
+                // Animated color transition when theme/palette changes — wraps the
+                // entire app in a Crossfade so switching from e.g. cyber to indigo
+                // is a smooth dissolve rather than a hard jump.
+                Crossfade(
+                    targetState = Triple(themeMode, isDynamicColor, themePalette),
+                    animationSpec = tween(durationMillis = 360, easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1f)),
+                    label = "theme_crossfade",
                 ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AppBackdrop(modifier = Modifier.matchParentSize())
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                            density = androidx.compose.ui.platform.LocalDensity.current.density,
+                            fontScale = 1f,
+                        ),
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AppBackdrop(modifier = Modifier.matchParentSize())
 
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = Color.Transparent
-                        ) {
-                            Box {
-                                MainContent(settingsStore)
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = Color.Transparent,
+                            ) {
+                                Box {
+                                    MainContent(settingsStore)
 
-                                FloatingToolbar(
-                                    currentTheme = themeMode,
-                                    onThemeChange = { mode ->
-                                        scope.launch { settingsStore.saveThemeMode(mode) }
-                                    },
-                                    isDynamicColor = isDynamicColor,
-                                    onDynamicColorChange = { dc ->
-                                        scope.launch { settingsStore.saveDynamicColor(dc) }
-                                    },
-                                    currentPalette = themePalette,
-                                    onPaletteChange = { pal ->
-                                        scope.launch { settingsStore.saveThemePalette(pal) }
-                                    }
-                                )
+                                    FloatingToolbar(
+                                        currentTheme = themeMode,
+                                        onThemeChange = { mode ->
+                                            scope.launch { settingsStore.saveThemeMode(mode) }
+                                        },
+                                        isDynamicColor = isDynamicColor,
+                                        onDynamicColorChange = { dc ->
+                                            scope.launch { settingsStore.saveDynamicColor(dc) }
+                                        },
+                                        currentPalette = themePalette,
+                                        onPaletteChange = { pal ->
+                                            scope.launch { settingsStore.saveThemePalette(pal) }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -228,13 +243,19 @@ fun MainContent(settingsStore: SettingsStore) {
                 }
             }
         ) {
-            Crossfade(
+            AnimatedContent(
                 targetState = selectedTab,
-                animationSpec = tween(200),
+                transitionSpec = {
+                    val direction = if (targetState > initialState) 1 else -1
+                    (slideInHorizontally(tween(280, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))) { it / 6 * direction } +
+                        fadeIn(tween(220, delayMillis = 40))) togetherWith
+                        (slideOutHorizontally(tween(220, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))) { -it / 6 * direction } +
+                        fadeOut(tween(180)))
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(bottom = navOverlayReserve),
-                label = "tab_content"
+                label = "tab_content",
             ) { page ->
                 when (page) {
                     0 -> ConnectionTab(settingsStore)
@@ -326,6 +347,11 @@ private fun ProxyNavigationBar(
         val itemWidth = (this.maxWidth - trackPadding * 2) / navItems.size
         val indicatorOffset = trackPadding + itemWidth * dragVisualIndex
 
+        val tokens = com.tgws.proxy.ui.AppTheme.colors
+        val indicatorBorderBrush = remember(tokens) {
+            Brush.horizontalGradient(tokens.cardBorderGradient)
+        }
+
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = shellColor,
@@ -342,6 +368,7 @@ private fun ProxyNavigationBar(
                 Surface(
                     shape = RoundedCornerShape(22.dp),
                     color = indicatorColor,
+                    border = BorderStroke(1.dp, indicatorBorderBrush),
                     modifier = Modifier
                         .offset(x = indicatorOffset)
                         .padding(vertical = 6.dp)

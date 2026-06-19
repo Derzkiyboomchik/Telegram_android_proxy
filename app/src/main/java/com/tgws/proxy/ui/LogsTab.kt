@@ -4,28 +4,50 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,19 +69,21 @@ fun LogsTab(settingsStore: SettingsStore) {
 
     val filteredLogs = remember(currentLogs, savedInfo, savedError, savedNull) {
         if (savedNull) {
-            listOf(LogEntry(
-                key = "null_msg",
-                message = "NULL - логи отключены",
-                count = 1,
-                isError = false,
-                priority = 4,
-                isEssential = true
-            ))
+            listOf(
+                LogEntry(
+                    key = "null_msg",
+                    message = "NULL — логи отключены",
+                    count = 1,
+                    isError = false,
+                    priority = 4,
+                    isEssential = true,
+                ),
+            )
         } else {
             currentLogs.filter { entry ->
                 entry.isEssential ||
-                (savedInfo && entry.priority == 4) ||
-                (savedError && entry.priority >= 5)
+                    (savedInfo && entry.priority == 4) ||
+                    (savedError && entry.priority >= 5)
             }
         }
     }
@@ -71,162 +95,227 @@ fun LogsTab(settingsStore: SettingsStore) {
     LaunchedEffect(filteredLogs.size) {
         if (filteredLogs.isNotEmpty()) {
             if (!hasInitialScrolled) {
-                // Absolute instant jump on first appearance
                 listState.scrollToItem(filteredLogs.size - 1)
                 hasInitialScrolled = true
             } else {
-                // Smooth scroll only for new incoming logs
                 listState.animateScrollToItem(filteredLogs.size - 1)
             }
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp),
+    ) {
+        // Sticky header — title + count + actions
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
         ) {
-            Text(
-                "Лог событий",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Row {
-                IconButton(onClick = { LogManager.clearLogs() }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Очистить", tint = MaterialTheme.colorScheme.primary)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Лог событий",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                    ) {
+                        Text(
+                            "${filteredLogs.size}",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
-                IconButton(onClick = {
-                    val text = filteredLogs.joinToString("\n") { "${it.message} (x${it.count})" }
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("TgWsProxy Logs", text)
-                    clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
-                }) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Копировать", tint = MaterialTheme.colorScheme.primary)
+                Row {
+                    IconButton(onClick = { LogManager.clearLogs() }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Очистить", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = {
+                        val text = filteredLogs.joinToString("\n") { "${it.message} (×${it.count})" }
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("TgWsProxy Logs", text)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Копировать", tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
 
+        // Filter chips — Material 3 FilterChip
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            LogFilterChip("INFO", savedInfo && !savedNull, true, modifier = Modifier.weight(1f)) {
+            LogFilterChip(
+                label = "INFO",
+                selected = savedInfo && !savedNull,
+                enabled = !savedNull,
+                modifier = Modifier.weight(1f),
+            ) {
                 scope.launch { settingsStore.saveLogFilters(false, !savedInfo, savedError, false) }
             }
-            LogFilterChip("ERROR", savedError && !savedNull, true, modifier = Modifier.weight(1f)) {
+            LogFilterChip(
+                label = "ERROR",
+                selected = savedError && !savedNull,
+                enabled = !savedNull,
+                modifier = Modifier.weight(1f),
+            ) {
                 scope.launch { settingsStore.saveLogFilters(false, savedInfo, !savedError, false) }
             }
-            LogFilterChip("NULL", savedNull, true, modifier = Modifier.weight(1f)) {
+            LogFilterChip(
+                label = "NULL",
+                selected = savedNull,
+                enabled = true,
+                modifier = Modifier.weight(1f),
+            ) {
                 scope.launch { settingsStore.saveLogFilters(false, false, false, !savedNull) }
             }
         }
-        val isDark = isSystemInDarkTheme()
-        val terminalBg = if (isDark) AppColors.terminalBgDark else AppColors.terminalBg
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(24.dp))
-                .background(terminalBg)
+        // Logs container — theme-aware instead of hardcoded terminal background
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            shape = AppShapes.XLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f),
+            ),
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize().padding(16.dp),
-                contentPadding = PaddingValues(bottom = 12.dp)
-            ) {
-                items(
-                    items = filteredLogs,
-                    key = { it.key }
-                ) { entry ->
-                    LogLine(entry)
+            if (filteredLogs.isEmpty()) {
+                EmptyLogState()
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    contentPadding = PaddingValues(bottom = 12.dp),
+                ) {
+                    items(
+                        items = filteredLogs,
+                        key = { it.key },
+                    ) { entry ->
+                        LogLine(entry)
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogFilterChip(
     label: String,
     selected: Boolean,
     enabled: Boolean,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
-    Button(
+    FilterChip(
+        selected = selected,
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(24.dp),
-        modifier = modifier.height(52.dp),
-        contentPadding = PaddingValues(0.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-        )
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
+        label = {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            )
+        },
+        modifier = modifier.height(40.dp),
+        shape = RoundedCornerShape(50),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            labelColor = MaterialTheme.colorScheme.onSurface,
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            disabledLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = enabled,
+            selected = selected,
+            borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+            selectedBorderColor = MaterialTheme.colorScheme.primary,
+            borderWidth = 1.dp,
+            selectedBorderWidth = 1.dp,
+        ),
+    )
 }
 
 @Composable
 private fun LogLine(entry: LogEntry) {
+    val tokens = AppTheme.colors
+    val scheme = MaterialTheme.colorScheme
+
     val color = when (entry.priority) {
-        6 -> AppColors.terminalRed
-        5 -> AppColors.terminalOrange
-        4 -> AppColors.terminalGreen
-        3 -> AppColors.terminalBlue
-        else -> AppColors.terminalText
+        6 -> tokens.logError
+        5 -> tokens.logWarn
+        4 -> tokens.logInfo
+        3 -> tokens.logDebug
+        else -> scheme.onSurface
+    }
+    val icon = when (entry.priority) {
+        6 -> Icons.Default.Error
+        5 -> Icons.Default.Warning
+        4 -> Icons.Default.Info
+        3 -> Icons.Default.BugReport
+        else -> Icons.Default.Info
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Count badge
+        // Count badge — theme-aware
         Surface(
-            color = AppColors.terminalCounter.copy(alpha = 0.2f),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+            color = tokens.logCounter.copy(alpha = 0.18f),
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.defaultMinSize(minWidth = 22.dp, minHeight = 22.dp),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(horizontal = 5.dp)
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
                     text = "${entry.count}",
-                    color = AppColors.terminalBlue,
+                    color = tokens.logCounter,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1
+                    maxLines = 1,
                 )
             }
         }
 
         Spacer(modifier = Modifier.width(6.dp))
-        
-        val icon = when (entry.priority) {
-            6 -> Icons.Default.Error
-            5 -> Icons.Default.Warning
-            4 -> Icons.Default.Info
-            3 -> Icons.Default.BugReport
-            else -> Icons.Default.Info
-        }
-        
+
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = color.copy(alpha = 0.8f),
-            modifier = Modifier.size(14.dp)
+            tint = color.copy(alpha = 0.85f),
+            modifier = Modifier.size(14.dp),
         )
-        
+
         Spacer(modifier = Modifier.width(6.dp))
 
         Text(
@@ -235,8 +324,42 @@ private fun LogLine(entry: LogEntry) {
             fontSize = 13.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = if (entry.isError) FontWeight.Bold else FontWeight.Normal,
-            lineHeight = 17.sp,
-            modifier = Modifier.weight(1f)
+            lineHeight = 18.sp,
+            modifier = Modifier.weight(1f),
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 3,
         )
+    }
+}
+
+@Composable
+private fun EmptyLogState() {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier.size(36.dp),
+            )
+            Text(
+                "Логи отсутствуют",
+                style = MaterialTheme.typography.bodyLarge,
+                color = scheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "Запустите прокси — события появятся здесь",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
     }
 }
