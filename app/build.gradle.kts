@@ -13,8 +13,8 @@ android {
         applicationId = "com.tgws.proxy"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -24,6 +24,10 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
+
+        // GitHub source for in-app self-updates. Used by UpdateChecker.
+        buildConfigField("String", "GITHUB_OWNER", "\"Derzkiyboomchik\"")
+        buildConfigField("String", "GITHUB_REPO", "\"Telegram_android_proxy\"")
     }
 
     buildTypes {

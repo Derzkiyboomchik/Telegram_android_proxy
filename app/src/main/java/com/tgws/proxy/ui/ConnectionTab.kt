@@ -22,6 +22,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -277,10 +278,19 @@ private fun GlassToggle(
     )
 
     Box(
-        modifier = Modifier.size(240.dp),
+        modifier = Modifier
+            .size(240.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = !isProcessing,
+                onClick = onToggle,
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        // Outer ambient glow — only when active
+        // Outer ambient glow — only when active (drawn first, sits at the
+        // bottom of the z-stack; doesn't intercept clicks because the
+        // clickable() lives on the outer Box, not on this child).
         if (isActive) {
             Box(
                 modifier = Modifier
@@ -320,7 +330,7 @@ private fun GlassToggle(
             )
         }
 
-        // Drop shadow
+        // Drop shadow — decorative only, doesn't intercept clicks.
         Box(
             modifier = Modifier
                 .size(200.dp)
@@ -332,7 +342,9 @@ private fun GlassToggle(
                 ),
         )
 
-        // Glass body — translucent with a soft tint when active
+        // Glass body — translucent with a soft tint when active. The border
+        // is drawn directly here (BorderStroke on Surface was intercepting
+        // taps — see commit message for details).
         val bodyColor by animateColorAsState(
             targetValue = if (isActive) tokens.telegramBlue.copy(alpha = 0.88f)
                           else scheme.surface.copy(alpha = 0.70f),
@@ -350,6 +362,7 @@ private fun GlassToggle(
             modifier = Modifier
                 .size(200.dp)
                 .clip(CircleShape)
+                .border(1.dp, rimColor, CircleShape)
                 .background(bodyColor)
                 .background(
                     Brush.radialGradient(
@@ -359,12 +372,6 @@ private fun GlassToggle(
                         ),
                         center = androidx.compose.ui.geometry.Offset(0.4f, 0.3f),
                     ),
-                )
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    enabled = !isProcessing,
-                    onClick = onToggle,
                 )
                 .graphicsLayer {
                     scaleX = pressScale
@@ -385,14 +392,6 @@ private fun GlassToggle(
                 colorFilter = ColorFilter.tint(tintColor, BlendMode.SrcIn),
             )
         }
-
-        // Outer rim — thin gradient stroke
-        Surface(
-            color = Color.Transparent,
-            shape = CircleShape,
-            border = BorderStroke(1.dp, rimColor),
-            modifier = Modifier.size(200.dp),
-        ) {}
     }
 }
 

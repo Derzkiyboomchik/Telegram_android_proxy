@@ -583,6 +583,13 @@ fun SettingsTab(settingsStore: SettingsStore) {
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        // ── Group: Обновления ── (in-app GitHub release updater)
+        AppSectionCard {
+            UpdateSection()
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
         // ── Group: О приложении ── (only GitHub, no donate)
         AppSectionCard {
             SectionHeader(
@@ -602,7 +609,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
             AboutRow(
                 icon = Icons.Default.Workspaces,
                 title = "Версия",
-                subtitle = "1.0.0 · MTProto over WebSocket",
+                subtitle = "${com.tgws.proxy.BuildConfig.VERSION_NAME} · MTProto over WebSocket",
                 accent = MaterialTheme.colorScheme.primary,
                 onClick = {},
             )
