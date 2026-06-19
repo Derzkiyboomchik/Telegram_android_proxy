@@ -9,6 +9,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -671,8 +673,8 @@ private fun LinkRow(
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val isPressed by androidx.compose.foundation.interaction.collectIsPressedAsState(interactionSource)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val bg by animateColorAsState(
         targetValue = if (isPressed) accent.copy(alpha = 0.10f) else Color.Transparent,
         animationSpec = tween(150),

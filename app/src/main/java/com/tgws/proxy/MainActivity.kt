@@ -177,9 +177,7 @@ fun MainContent(settingsStore: SettingsStore) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var dragTargetIndex by remember { mutableIntStateOf(-1) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
-    val context = LocalContext.current
     val density = LocalDensity.current
-    val scope = rememberCoroutineScope()
     val navItems = remember {
         listOf(
             NavItem("Прокси", Icons.Default.PowerSettingsNew),

@@ -18,11 +18,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -35,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -91,7 +96,7 @@ fun FloatingToolbar(
     val tabWidthPx = remember(density) { with(density) { tabWidthDp.toPx() } }
     val fallbackTabHeightPx = remember(density) { with(density) { tabHeightDp.toPx() } }
     val edgePaddingPx = remember(density) { with(density) { 8.dp.toPx() } }
-    val safeDrawing = androidx.compose.foundation.layout.WindowInsets.safeDrawing
+    val safeDrawing = WindowInsets.safeDrawing
     val safeTopPx = with(density) { safeDrawing.getTop(density).toFloat() }
     val safeBottomPx = with(density) { safeDrawing.getBottom(density).toFloat() }
     val effectiveTabHeightPx = maxOf(tabHeightPx, fallbackTabHeightPx)
@@ -310,7 +315,7 @@ private fun ThemeOption(
 ) {
     val tokens = AppTheme.colors
     val interaction = remember { MutableInteractionSource() }
-    val isPressed by interaction.collectIsPressedAsState(interaction)
+    val isPressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 500f),
@@ -367,7 +372,7 @@ fun PaletteCircle(
 ) {
     val isSelected = paletteId == selectedId
     val interaction = remember { MutableInteractionSource() }
-    val isPressed by interaction.collectIsPressedAsState(interaction)
+    val isPressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.92f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 600f),
