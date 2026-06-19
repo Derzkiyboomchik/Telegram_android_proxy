@@ -2,11 +2,12 @@ package com.tgws.proxy.ui
 
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,8 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -74,7 +75,8 @@ fun FloatingToolbar(
 ) {
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
-    val tokens = AppTheme.colors
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.background.luminance() < 0.22f
 
     val screenHeightPx = remember(configuration.screenHeightDp, density) {
         with(density) { configuration.screenHeightDp.dp.toPx() }
@@ -111,7 +113,6 @@ fun FloatingToolbar(
     val defaultOffsetY = (screenHeightPx * 0.24f).coerceIn(minOffsetY, maxOffsetY)
 
     val targetXPx = if (isRightSide) screenWidthPx - tabWidthPx else 0f
-
     val animatedTabXPx by animateFloatAsState(
         targetValue = targetXPx,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
@@ -119,14 +120,9 @@ fun FloatingToolbar(
     )
 
     LaunchedEffect(minOffsetY, maxOffsetY) {
-        offsetY = if (offsetY < 0f) {
-            defaultOffsetY
-        } else {
-            offsetY.coerceIn(minOffsetY, maxOffsetY)
-        }
+        offsetY = if (offsetY < 0f) defaultOffsetY else offsetY.coerceIn(minOffsetY, maxOffsetY)
     }
 
-    // Press feedback for the tab handle
     val tabInteraction = remember { MutableInteractionSource() }
     val isTabPressed by tabInteraction.collectIsPressedAsState()
     val tabScale by animateFloatAsState(
@@ -135,8 +131,11 @@ fun FloatingToolbar(
         label = "tab_scale",
     )
 
+    val tabBodyColor = scheme.surface.copy(alpha = if (isDark) 0.55f else 0.75f)
+    val tabBorderColor = Color.White.copy(alpha = if (isDark) 0.30f else 0.50f)
+
     Box(modifier = modifier.fillMaxSize()) {
-        // ── Tab handle ───────────────────────────────────────────────────────
+        // ── Tab handle ──
         Surface(
             onClick = { isExpanded = !isExpanded },
             modifier = Modifier
@@ -157,21 +156,13 @@ fun FloatingToolbar(
                     )
                 },
             shape = if (isRightSide)
-                RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
+                RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp)
             else
-                RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                Brush.verticalGradient(
-                    colors = listOf(
-                        tokens.telegramBlue.copy(alpha = 0.55f),
-                        tokens.neonViolet.copy(alpha = 0.25f),
-                    ),
-                ),
-            ),
+                RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp),
+            color = tabBodyColor,
+            border = BorderStroke(0.5.dp, tabBorderColor),
             shadowElevation = AppElevation.Level3,
-            tonalElevation = AppElevation.Level2,
+            tonalElevation = AppElevation.Level0,
             interactionSource = tabInteraction,
         ) {
             Box(
@@ -182,12 +173,12 @@ fun FloatingToolbar(
                     painter = painterResource(id = R.drawable.ic_palette),
                     contentDescription = "Тема",
                     modifier = Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tint = scheme.onSurface,
                 )
             }
         }
 
-        // ── Expanded panel ───────────────────────────────────────────────────
+        // ── Expanded panel ──
         AnimatedVisibility(
             visible = isExpanded,
             enter = fadeIn(),
@@ -208,13 +199,10 @@ fun FloatingToolbar(
                     panelHeightPx = coordinates.size.height.toFloat()
                 },
                 shape = AppShapes.XLarge,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    Brush.verticalGradient(tokens.cardBorderGradient),
-                ),
+                color = scheme.surface.copy(alpha = if (isDark) 0.65f else 0.85f),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.22f else 0.45f)),
                 shadowElevation = AppElevation.Level3,
-                tonalElevation = AppElevation.Level2,
+                tonalElevation = AppElevation.Level0,
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp).width(panelWidthDp - 28.dp),
@@ -223,7 +211,7 @@ fun FloatingToolbar(
                     Text(
                         "Тема",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = scheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
                     )
@@ -249,7 +237,7 @@ fun FloatingToolbar(
 
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        color = scheme.outlineVariant.copy(alpha = 0.50f),
                     )
 
                     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -265,8 +253,8 @@ fun FloatingToolbar(
                             "Динамические цвета",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
-                            color = if (supportsDynamicColor) MaterialTheme.colorScheme.onSurfaceVariant
-                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            color = if (supportsDynamicColor) scheme.onSurfaceVariant
+                                    else scheme.onSurfaceVariant.copy(alpha = 0.5f),
                         )
                         Switch(
                             checked = showDynamicColorOn,
@@ -280,22 +268,21 @@ fun FloatingToolbar(
                         Column {
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                color = scheme.outlineVariant.copy(alpha = 0.50f),
                             )
                             Text(
                                 "Палитра",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = scheme.onSurfaceVariant,
                                 modifier = Modifier.padding(bottom = 6.dp, start = 4.dp),
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                             ) {
-                                PaletteCircle("cyber", 0xFF2AABEE, currentPalette, onPaletteChange)
-                                PaletteCircle("indigo", 0xFF5B588D, currentPalette, onPaletteChange)
-                                PaletteCircle("forest", 0xFF5F5D68, currentPalette, onPaletteChange)
-                                PaletteCircle("espresso", 0xFF6D4C41, currentPalette, onPaletteChange)
+                                PaletteCircle("aurora", 0xFF0EA5B7, currentPalette, onPaletteChange)
+                                PaletteCircle("sunset", 0xFFB5413B, currentPalette, onPaletteChange)
+                                PaletteCircle("graphite", 0xFF5C5F62, currentPalette, onPaletteChange)
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                         }
@@ -313,7 +300,7 @@ private fun ThemeOption(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val tokens = AppTheme.colors
+    val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val isPressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -321,18 +308,15 @@ private fun ThemeOption(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 500f),
         label = "theme_opt_scale",
     )
+    val isDark = scheme.background.luminance() < 0.22f
 
     Surface(
         onClick = onClick,
         shape = AppShapes.Large,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
-        border = if (selected) androidx.compose.foundation.BorderStroke(
-            1.dp,
-            Brush.horizontalGradient(
-                listOf(tokens.telegramBlue.copy(alpha = 0.55f), tokens.neonViolet.copy(alpha = 0.25f)),
-            ),
-        ) else null,
+        color = if (selected) scheme.primary.copy(alpha = if (isDark) 0.30f else 0.18f)
+                else Color.Transparent,
+        border = if (selected) BorderStroke(0.5.dp, Color.White.copy(alpha = 0.45f))
+                 else BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f)),
         interactionSource = interaction,
         modifier = Modifier.graphicsLayer {
             scaleX = scale
@@ -348,15 +332,13 @@ private fun ThemeOption(
                 painter = painterResource(id = icon),
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = if (selected) MaterialTheme.colorScheme.primary
-                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (selected) scheme.primary else scheme.onSurfaceVariant,
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface,
+                color = if (selected) scheme.primary else scheme.onSurface,
                 fontSize = 13.sp,
             )
         }
@@ -390,17 +372,13 @@ fun PaletteCircle(
             .clickable(interactionSource = interaction, indication = null) { onClick(paletteId) }
             .then(
                 if (isSelected) Modifier.border(
-                    width = 3.dp,
-                    brush = Brush.sweepGradient(
-                        listOf(
-                            AppTheme.colors.telegramBlue,
-                            AppTheme.colors.neonCyan,
-                            AppTheme.colors.neonViolet,
-                            AppTheme.colors.telegramBlue,
-                        ),
-                    ),
+                    width = 2.dp,
+                    color = Color.White,
                     shape = CircleShape,
                 ) else Modifier,
             ),
     )
 }
+
+private fun Color.luminance(): Float =
+    0.299f * red + 0.587f * green + 0.114f * blue

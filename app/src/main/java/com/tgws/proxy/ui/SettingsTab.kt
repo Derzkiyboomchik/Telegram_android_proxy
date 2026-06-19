@@ -32,13 +32,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lan
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Workspaces
@@ -70,9 +67,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -136,7 +132,7 @@ fun openTelegram(context: Context, url: String) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Section header — used inside AppSectionCard to introduce a sub-group
+// Section header — used inside GlassCard to introduce a sub-group
 // ════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun SectionHeader(
@@ -145,23 +141,25 @@ private fun SectionHeader(
     subtitle: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val tokens = AppTheme.colors
+    val tokens = AppTheme.glass
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
+        // Icon "chip" — glass pill
         Surface(
             shape = AppShapes.Small,
-            color = tokens.telegramBlue.copy(alpha = 0.14f),
-            modifier = Modifier.size(28.dp),
+            color = tokens.accent.copy(alpha = 0.14f),
+            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.20f)),
+            modifier = Modifier.size(36.dp),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = tokens.telegramBlue,
-                    modifier = Modifier.size(18.dp),
+                    tint = tokens.accent,
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -169,7 +167,7 @@ private fun SectionHeader(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = scheme.primary,
+                color = scheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
             )
             if (subtitle != null) {
@@ -184,7 +182,7 @@ private fun SectionHeader(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Setting row with title + subtitle + trailing switch
+// Switch row
 // ════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun SwitchSettingRow(
@@ -199,7 +197,7 @@ private fun SwitchSettingRow(
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Icon(
             imageVector = icon,
@@ -231,13 +229,13 @@ private fun SwitchSettingRow(
 @Composable
 private fun SoftDivider() {
     HorizontalDivider(
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f),
         modifier = Modifier.padding(vertical = 4.dp),
     )
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// SettingsTab — grouped, with section headers and subtitles
+// SettingsTab — Liquid Glass variant. NO donate row.
 // ════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -275,7 +273,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(28.dp),
                 strokeWidth = 2.dp,
             )
         }
@@ -296,7 +294,6 @@ fun SettingsTab(settingsStore: SettingsStore) {
     var dc4mText by rememberSaveable(savedDc4m) { mutableStateOf(savedDc4m) }
     var dc5mText by rememberSaveable(savedDc5m) { mutableStateOf(savedDc5m) }
     var dc203mText by rememberSaveable(savedDc203m) { mutableStateOf(savedDc203m) }
-
     var portText by rememberSaveable(savedPort) { mutableStateOf(savedPort) }
     var selectedPoolSize by rememberSaveable(savedPoolSize) { mutableIntStateOf(savedPoolSize) }
     var cfEnabled by rememberSaveable(savedCfEnabled) { mutableStateOf(savedCfEnabled) }
@@ -316,7 +313,6 @@ fun SettingsTab(settingsStore: SettingsStore) {
     }
 
     var saveJob by remember { mutableStateOf<Job?>(null) }
-
     fun scheduleSave() {
         saveJob?.cancel()
         saveJob = scope.launch {
@@ -358,23 +354,22 @@ fun SettingsTab(settingsStore: SettingsStore) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 16.dp),
     ) {
-        // Page header
         Row(
-            modifier = Modifier.fillMaxWidth().height(48.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = "Настройки",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ══ Group 1: Подключение ══
+        // ── Group: Подключение ──
         AppSectionCard {
             SectionHeader(
                 icon = Icons.Default.Public,
@@ -409,7 +404,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                     disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 ),
                 border = BorderStroke(
-                    1.dp,
+                    0.5.dp,
                     MaterialTheme.colorScheme.outline.copy(alpha = if (cfEnabled || isRunning) 0.2f else 0.5f),
                 ),
             ) {
@@ -434,9 +429,9 @@ fun SettingsTab(settingsStore: SettingsStore) {
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // ══ Group 2: Обход блокировок ══
+        // ── Group: Обход блокировок ──
         AppSectionCard {
             SectionHeader(
                 icon = Icons.Default.Shield,
@@ -459,7 +454,6 @@ fun SettingsTab(settingsStore: SettingsStore) {
 
             SoftDivider()
 
-            // Bypass mode dropdown
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -522,9 +516,9 @@ fun SettingsTab(settingsStore: SettingsStore) {
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // ══ Group 3: Производительность ══
+        // ── Group: Производительность ──
         AppSectionCard {
             SectionHeader(
                 icon = Icons.Default.Workspaces,
@@ -550,9 +544,9 @@ fun SettingsTab(settingsStore: SettingsStore) {
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // ══ Group 4: Секретный ключ ══
+        // ── Group: Секретный ключ ──
         AppSectionCard {
             SectionHeader(
                 icon = Icons.Default.VpnKey,
@@ -587,85 +581,42 @@ fun SettingsTab(settingsStore: SettingsStore) {
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // ══ Group 5: Внешний вид ══
-        AppSectionCard {
-            SectionHeader(
-                icon = Icons.Default.Palette,
-                title = "Внешний вид",
-                subtitle = "Тема оформления приложения",
-            )
-            AppearanceHintRow(
-                text = "Тема, тёмный режим и палитра настраиваются через плавающую панель справа — нажмите на иконку палитры.",
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ══ Group 6: Ссылки ══
+        // ── Group: О приложении ── (only GitHub, no donate)
         AppSectionCard {
             SectionHeader(
                 icon = Icons.Default.Code,
-                title = "Ссылки",
-                subtitle = "Исходный код и поддержка проекта",
+                title = "О приложении",
+                subtitle = "Исходный код и версия",
             )
-            LinkRow(
+            AboutRow(
                 icon = Icons.Default.Code,
                 title = "GitHub",
                 subtitle = "Исходный код проекта",
-                accent = AppTheme.colors.github,
+                accent = MaterialTheme.colorScheme.primary,
             ) {
                 openUrlInBrowser(context, "https://github.com/Derzkiyboomchik/Telegram_android_proxy")
             }
             SoftDivider()
-            LinkRow(
-                icon = Icons.Default.Favorite,
-                title = "Поддержать",
-                subtitle = "Поддержать разработчика",
-                accent = AppTheme.colors.donate,
-            ) {
-                openUrlInBrowser(context, "https://yoomoney.ru/to/4100116222954252")
-            }
+            AboutRow(
+                icon = Icons.Default.Workspaces,
+                title = "Версия",
+                subtitle = "1.0.0 · MTProto over WebSocket",
+                accent = MaterialTheme.colorScheme.primary,
+                onClick = {},
+            )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
     }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Small UI atoms specific to SettingsTab
+// AboutRow — used for the "О приложении" section
 // ════════════════════════════════════════════════════════════════════════════
 @Composable
-private fun AppearanceHintRow(text: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppShapes.Medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Default.Palette,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LinkRow(
+private fun AboutRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
@@ -676,55 +627,56 @@ private fun LinkRow(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val bg by animateColorAsState(
-        targetValue = if (isPressed) accent.copy(alpha = 0.10f) else Color.Transparent,
+        targetValue = if (isPressed && onClick != {}) accent.copy(alpha = 0.10f) else Color.Transparent,
         animationSpec = tween(150),
-        label = "link_bg",
+        label = "about_bg",
     )
-    Surface(
-        onClick = onClick,
-        shape = AppShapes.Medium,
-        color = bg,
-        interactionSource = interactionSource,
-        modifier = Modifier.fillMaxWidth(),
+    val clickable = if (onClick != {}) {
+        Modifier.background(bg)
+    } else {
+        Modifier.background(bg)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(clickable)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Surface(
+            shape = AppShapes.Small,
+            color = accent.copy(alpha = 0.14f),
+            modifier = Modifier.size(32.dp),
         ) {
-            Surface(
-                shape = AppShapes.Small,
-                color = accent.copy(alpha = 0.14f),
-                modifier = Modifier.size(32.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp),
                 )
             }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
         }
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PoolChip
+// ════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun PoolChip(
     label: String,
@@ -734,12 +686,11 @@ private fun PoolChip(
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val tokens = AppTheme.colors
     val container by animateColorAsState(
         targetValue = when {
             !enabled -> scheme.surfaceVariant.copy(alpha = 0.3f)
-            selected -> scheme.primary
-            else -> scheme.surfaceVariant
+            selected -> scheme.primary.copy(alpha = 0.85f)
+            else -> scheme.surface.copy(alpha = 0.50f)
         },
         animationSpec = tween(200),
         label = "pool_container",
@@ -754,8 +705,8 @@ private fun PoolChip(
         label = "pool_content",
     )
     val border by animateColorAsState(
-        targetValue = if (selected && enabled) tokens.neonCyan.copy(alpha = 0.55f)
-                      else scheme.outlineVariant.copy(alpha = 0.30f),
+        targetValue = if (selected && enabled) Color.White.copy(alpha = 0.45f)
+                      else Color.White.copy(alpha = 0.20f),
         animationSpec = tween(200),
         label = "pool_border",
     )
@@ -768,7 +719,7 @@ private fun PoolChip(
             containerColor = container,
             contentColor = content,
         ),
-        border = BorderStroke(1.dp, border),
+        border = BorderStroke(0.5.dp, border),
     ) {
         Text(
             label,
@@ -778,7 +729,7 @@ private fun PoolChip(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DC IP setup dialog — preserved as-is in behaviour, restyled
+// IpSetupDialog — restyled
 // ════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -811,7 +762,7 @@ private fun IpSetupDialog(
     ) {
         Surface(
             shape = AppShapes.XLarge,
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
             tonalElevation = AppElevation.Level3,
             modifier = Modifier
                 .fillMaxWidth(0.95f)
@@ -819,9 +770,7 @@ private fun IpSetupDialog(
                 .heightIn(max = 560.dp),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
@@ -868,11 +817,8 @@ private fun IpSetupDialog(
                         dcInput("DC4", dc4Text, onDc4Change)
                         dcInput("DC5", dc5Text, onDc5Change)
                         dcInput("DC203", dc203Text, onDc203Change)
-
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
                         Text("Медиа датацентры", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
                         dcInput("DC1m", dc1mText, onDc1mChange)
                         dcInput("DC2m", dc2mText, onDc2mChange)
                         dcInput("DC3m", dc3mText, onDc3mChange)
@@ -895,10 +841,7 @@ private fun IpSetupDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Switch(
-                        checked = isExperimental,
-                        onCheckedChange = onExperimentalChange,
-                    )
+                    Switch(checked = isExperimental, onCheckedChange = onExperimentalChange)
                 }
 
                 Button(

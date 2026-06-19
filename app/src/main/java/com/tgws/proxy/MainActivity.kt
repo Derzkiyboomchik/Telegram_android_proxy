@@ -292,26 +292,23 @@ private fun ProxyNavigationBar(
     val isDark = remember(colors.background) { colors.background.luminance() < 0.22f }
     val selectedColor = colors.primary
     val unselectedColor = colors.onSurfaceVariant.copy(alpha = 0.55f)
-    val shellColor = remember(isDark, colors.surface, colors.surfaceVariant) {
-        if (isDark) {
-            colors.surface.copy(alpha = 0.78f)
-        } else {
-            lerp(colors.surface, colors.surfaceVariant, 0.48f).copy(alpha = 0.95f)
-        }
+
+    // Liquid glass shell — translucent with a thin white-tinted border
+    val shellColor = remember(isDark, colors.surface) {
+        colors.surface.copy(alpha = if (isDark) 0.65f else 0.82f)
     }
-    val shellBorder = remember(isDark, colors.outlineVariant, colors.outline) {
-        if (isDark) {
-            colors.outlineVariant.copy(alpha = 0.42f)
-        } else {
-            colors.outline.copy(alpha = 0.16f)
-        }
+    val shellBorder = remember(isDark) {
+        if (isDark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.20f)
+        else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.45f)
     }
-    val indicatorColor = remember(isDark, colors.primaryContainer, colors.surface) {
-        if (isDark) {
-            colors.primaryContainer.copy(alpha = 0.84f)
-        } else {
-            lerp(colors.primaryContainer, colors.surface, 0.18f).copy(alpha = 0.97f)
-        }
+    // Selected indicator — tinted glass
+    val indicatorColor = remember(isDark, colors.primary, colors.primaryContainer) {
+        if (isDark) colors.primary.copy(alpha = 0.30f)
+        else colors.primary.copy(alpha = 0.18f)
+    }
+    val indicatorBorder = remember(isDark) {
+        if (isDark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f)
+        else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.50f)
     }
     val indicatorIndex = remember { Animatable(selectedTab.toFloat()) }
     val dragVisualIndex = indicatorIndex.value
@@ -345,17 +342,12 @@ private fun ProxyNavigationBar(
         val itemWidth = (this.maxWidth - trackPadding * 2) / navItems.size
         val indicatorOffset = trackPadding + itemWidth * dragVisualIndex
 
-        val tokens = com.tgws.proxy.ui.AppTheme.colors
-        val indicatorBorderBrush = remember(tokens) {
-            Brush.horizontalGradient(tokens.cardBorderGradient)
-        }
-
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(32.dp),
             color = shellColor,
-            border = BorderStroke(1.dp, shellBorder),
+            border = BorderStroke(0.5.dp, shellBorder),
             tonalElevation = 0.dp,
-            shadowElevation = if (isDark) 10.dp else 8.dp,
+            shadowElevation = if (isDark) 12.dp else 8.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Box(
@@ -366,7 +358,7 @@ private fun ProxyNavigationBar(
                 Surface(
                     shape = RoundedCornerShape(22.dp),
                     color = indicatorColor,
-                    border = BorderStroke(1.dp, indicatorBorderBrush),
+                    border = BorderStroke(0.5.dp, indicatorBorder),
                     modifier = Modifier
                         .offset(x = indicatorOffset)
                         .padding(vertical = 6.dp)

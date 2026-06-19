@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -91,8 +93,6 @@ fun LogsTab(settingsStore: SettingsStore) {
 
     val listState = rememberLazyListState()
     var hasInitialScrolled by remember { mutableStateOf(false) }
-
-    // Auto-scroll logic
     LaunchedEffect(filteredLogs.size) {
         if (filteredLogs.isNotEmpty()) {
             if (!hasInitialScrolled) {
@@ -104,20 +104,25 @@ fun LogsTab(settingsStore: SettingsStore) {
         }
     }
 
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.background.luminance() < 0.22f
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 16.dp),
     ) {
-        // Sticky header — title + count + actions
+        // Sticky header — glass panel
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
+            shape = AppShapes.Large,
+            color = scheme.surface.copy(alpha = if (isDark) 0.45f else 0.65f),
+            border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.20f else 0.40f)),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -125,25 +130,25 @@ fun LogsTab(settingsStore: SettingsStore) {
                     Text(
                         "Лог событий",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = scheme.onSurface,
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        color = scheme.primary.copy(alpha = 0.18f),
                     ) {
                         Text(
                             "${filteredLogs.size}",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = scheme.primary,
                             fontWeight = FontWeight.Bold,
                         )
                     }
                 }
                 Row {
                     IconButton(onClick = { LogManager.clearLogs() }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Очистить", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Delete, contentDescription = "Очистить", tint = scheme.primary)
                     }
                     IconButton(onClick = {
                         val text = filteredLogs.joinToString("\n") { "${it.message} (×${it.count})" }
@@ -152,17 +157,17 @@ fun LogsTab(settingsStore: SettingsStore) {
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
                     }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Копировать", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Копировать", tint = scheme.primary)
                     }
                 }
             }
         }
 
-        // Filter chips — Material 3 FilterChip
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Filter chips
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             LogFilterChip(
@@ -191,15 +196,12 @@ fun LogsTab(settingsStore: SettingsStore) {
             }
         }
 
-        // Logs container — theme-aware instead of hardcoded terminal background
+        // Logs container — translucent glass
         Surface(
             modifier = Modifier.fillMaxSize(),
             shape = AppShapes.XLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f),
-            ),
+            color = scheme.surface.copy(alpha = if (isDark) 0.40f else 0.60f),
+            border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.18f else 0.35f)),
         ) {
             if (filteredLogs.isEmpty()) {
                 EmptyLogState()
@@ -244,27 +246,27 @@ private fun LogFilterChip(
         modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(50),
         colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
             labelColor = MaterialTheme.colorScheme.onSurface,
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
             selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
             disabledLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
         ),
         border = FilterChipDefaults.filterChipBorder(
             enabled = enabled,
             selected = selected,
-            borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-            selectedBorderColor = MaterialTheme.colorScheme.primary,
-            borderWidth = 1.dp,
-            selectedBorderWidth = 1.dp,
+            borderColor = Color.White.copy(alpha = 0.25f),
+            selectedBorderColor = Color.White.copy(alpha = 0.45f),
+            borderWidth = 0.5.dp,
+            selectedBorderWidth = 0.5.dp,
         ),
     )
 }
 
 @Composable
 private fun LogLine(entry: LogEntry) {
-    val tokens = AppTheme.colors
+    val tokens = AppTheme.glass
     val scheme = MaterialTheme.colorScheme
 
     val color = when (entry.priority) {
@@ -283,12 +285,9 @@ private fun LogLine(entry: LogEntry) {
     }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Count badge — theme-aware
         Surface(
             color = tokens.logCounter.copy(alpha = 0.18f),
             shape = RoundedCornerShape(50),
@@ -342,13 +341,13 @@ private fun EmptyLogState() {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.Info,
                 contentDescription = null,
-                tint = scheme.onSurfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier.size(36.dp),
+                tint = scheme.onSurfaceVariant.copy(alpha = 0.40f),
+                modifier = Modifier.size(40.dp),
             )
             Text(
                 "Логи отсутствуют",
@@ -364,3 +363,6 @@ private fun EmptyLogState() {
         }
     }
 }
+
+private fun Color.luminance(): Float =
+    0.299f * red + 0.587f * green + 0.114f * blue
