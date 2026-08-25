@@ -84,6 +84,7 @@ class MainActivity : ComponentActivity() {
             requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         checkBatteryOptimizations()
+        UpdateWorker.checkNow(this)
         
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -110,7 +111,8 @@ class MainActivity : ComponentActivity() {
                     targetState = Triple(themeMode, isDynamicColor, themePalette),
                     animationSpec = tween(durationMillis = 360, easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1f)),
                     label = "theme_crossfade",
-                ) {
+                )
+                {
                     androidx.compose.runtime.CompositionLocalProvider(
                         androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
                             density = androidx.compose.ui.platform.LocalDensity.current.density,
@@ -188,9 +190,15 @@ fun MainContent(settingsStore: SettingsStore) {
     val safeBottomInset = with(density) { WindowInsets.safeDrawing.getBottom(density).toDp() }
     val navOverlayReserve = safeBottomInset + 96.dp
 
-    DisposableEffect(Unit) {
-        LogManager.startListening()
-        onDispose { LogManager.stopListening() }
+    DisposableEffect(selectedTab) {
+        if (selectedTab == 2) {
+            LogManager.startListening()
+        }
+        onDispose {
+            if (selectedTab == 2) {
+                LogManager.stopListening()
+            }
+        }
     }
 
     Scaffold(

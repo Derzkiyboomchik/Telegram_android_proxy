@@ -44,7 +44,7 @@ class SettingsStore(private val context: Context) {
         val LOG_SHOW_ERROR = booleanPreferencesKey("log_show_error")
         val LOG_SHOW_NULL = booleanPreferencesKey("log_show_null")
         val IS_EXPERIMENTAL_MODE = booleanPreferencesKey("is_experimental_mode")
-        val BYPASS_MODE = intPreferencesKey("bypass_mode")
+        val POWER_SAVER_ENABLED = booleanPreferencesKey("power_saver_enabled")
         val DIRECT_DC_DEFAULTS_MIGRATED = booleanPreferencesKey("direct_dc_defaults_migrated")
         val DIRECT_DC_DEFAULTS_V2_MIGRATED = booleanPreferencesKey("direct_dc_defaults_v2_migrated")
     }
@@ -74,7 +74,7 @@ class SettingsStore(private val context: Context) {
     val customCfDomain: Flow<String> = context.dataStore.data.map { it[Keys.CUSTOM_CF_DOMAIN] ?: "" }
     val autoStartOnBoot: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUTO_START_ON_BOOT] ?: false }
     val secretKey: Flow<String> = context.dataStore.data.map { it[Keys.SECRET_KEY] ?: "" }
-    val bypassMode: Flow<Int> = context.dataStore.data.map { it[Keys.BYPASS_MODE] ?: 0 }
+    val powerSaverEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.POWER_SAVER_ENABLED] ?: true }
 
     val logShowDebug: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOG_SHOW_DEBUG] ?: false }
     val logShowInfo: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOG_SHOW_INFO] ?: DEFAULT_LOG_SHOW_INFO }
@@ -83,6 +83,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun saveSecretKey(key: String) {
         context.dataStore.edit { it[Keys.SECRET_KEY] = key }
+    }
+
+    suspend fun savePowerSaverEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.POWER_SAVER_ENABLED] = enabled }
     }
 
     suspend fun saveThemeMode(mode: String) {
@@ -133,7 +137,7 @@ class SettingsStore(private val context: Context) {
                         dc1m: String, dc2m: String, dc3m: String, dc4m: String, dc5m: String, dc203m: String,
                         isExperimental: Boolean, port: String, poolSize: Int,
                         cfproxyEnabled: Boolean, customCfDomainEnabled: Boolean, customCfDomain: String, secretKey: String,
-                        bypassMode: Int = 0) {
+                        powerSaverEnabled: Boolean = true) {
         context.dataStore.edit {
             it[Keys.IS_DC_AUTO] = isDcAuto
             it[Keys.DC1] = dc1
@@ -155,7 +159,7 @@ class SettingsStore(private val context: Context) {
             it[Keys.CUSTOM_CF_DOMAIN_ENABLED] = customCfDomainEnabled
             it[Keys.CUSTOM_CF_DOMAIN] = customCfDomain
             it[Keys.SECRET_KEY] = secretKey
-            it[Keys.BYPASS_MODE] = bypassMode
+            it[Keys.POWER_SAVER_ENABLED] = powerSaverEnabled
         }
     }
 }

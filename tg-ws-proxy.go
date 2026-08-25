@@ -31,7 +31,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	utls "github.com/refraction-networking/utls"
 	"io"
 	"log"
 	"math"
@@ -93,11 +92,12 @@ const (
 )
 
 var (
-	recvBuf    = defaultRecvBuf
-	sendBuf    = defaultSendBuf
-	poolSize   atomic.Int32
-	bypassMode atomic.Int32
-	logVerbose = false
+	recvBuf         = defaultRecvBuf
+	sendBuf         = defaultSendBuf
+	poolSize        atomic.Int32
+	isNetworkOnline atomic.Bool
+	isPowerSaveMode atomic.Bool
+	logVerbose      = false
 )
 
 type cfproxy429State struct {
@@ -107,6 +107,8 @@ type cfproxy429State struct {
 
 func init() {
 	poolSize.Store(defaultPoolSz)
+	isNetworkOnline.Store(true)
+	isPowerSaveMode.Store(true)
 }
 
 // Cloudflare proxy config
@@ -564,6 +566,9 @@ func initCfproxyDomains() {
 }
 
 func startCfproxyRefresh(ctx context.Context) {
+	if !isNetworkOnline.Load() {
+		return
+	}
 	if !shouldRefreshCfproxyDomains() {
 		logDebug.Printf(" CF: кеш свежий, пропускаю обновление списка")
 		return
@@ -571,6 +576,9 @@ func startCfproxyRefresh(ctx context.Context) {
 
 	go func() {
 		for i := 0; i < 3; i++ {
+			if !isNetworkOnline.Load() {
+				return
+			}
 			if tryRefreshCfproxyDomains(ctx) {
 				return
 			}
@@ -586,6 +594,9 @@ func startCfproxyRefresh(ctx context.Context) {
 }
 
 func tryRefreshCfproxyDomains(ctx context.Context) bool {
+	if !isNetworkOnline.Load() {
+		return false
+	}
 	cfproxyMu.RLock()
 	hasUserDomain := cfproxyUserDomain != ""
 	cfproxyMu.RUnlock()
@@ -813,6 +824,8 @@ func SafeClose(conn net.Conn) {
 
 var tlsConfigPool = &tls.Config{
 	ClientSessionCache: tls.NewLRUClientSessionCache(100),
+	MinVersion:         tls.VersionTLS12,
+	NextProtos:         []string{"http/1.1"},
 }
 
 const (
@@ -959,11 +972,8 @@ func wsConnectTimeout(timeout float64) time.Duration {
 	return time.Duration(timeout * float64(time.Second))
 }
 
-func wsHandshakeTimeout(total time.Duration, isUTLS bool) time.Duration {
-	minTimeout := 3 * time.Second
-	if isUTLS {
-		minTimeout = 6 * time.Second
-	}
+func wsHandshakeTimeout(total time.Duration) time.Duration {
+	minTimeout := 4 * time.Second
 	if total <= 0 {
 		return minTimeout
 	}
@@ -1053,59 +1063,19 @@ func wsConnectOnce(ctx context.Context, dialAddr, domain, path string, timeout t
 
 	setSockOpts(rawConn)
 
-	mode := bypassMode.Load()
-	isUTLS := mode != 0
-	handshakeTimeout := wsHandshakeTimeout(timeout, isUTLS)
+	handshakeTimeout := wsHandshakeTimeout(timeout)
 	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
 
-	if !isUTLS {
-		tlsConn := tls.Client(rawConn, tlsCfg)
-		_ = tlsConn.SetDeadline(time.Now().Add(handshakeTimeout))
-		if err := tlsConn.HandshakeContext(handshakeCtx); err != nil {
-			rawConn.Close()
-			logDebug.Printf(" ws tls fail %s via %s: %s", domain, dialAddr, compactConnError(err))
-			return nil, err
-		}
-		_ = tlsConn.SetDeadline(time.Time{})
-		rawConn = tlsConn
-	} else {
-		utlsCfg := &utls.Config{
-			ServerName:         domain,
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"http/1.1"},
-		}
-		var profile utls.ClientHelloID
-		switch mode {
-		case 1:
-			profile = utls.HelloChrome_Auto
-		case 2:
-			profile = utls.HelloFirefox_Auto
-		case 3:
-			profiles := []utls.ClientHelloID{
-				utls.HelloChrome_Auto,
-				utls.HelloFirefox_Auto,
-				utls.HelloSafari_Auto,
-				utls.HelloEdge_Auto,
-			}
-			b := make([]byte, 1)
-			_, _ = rand.Read(b)
-			profile = profiles[int(b[0])%len(profiles)]
-		default:
-			profile = utls.HelloChrome_Auto
-		}
-		uConn := utls.UClient(rawConn, utlsCfg, profile)
-		_ = uConn.SetDeadline(time.Now().Add(handshakeTimeout))
-		logDebug.Printf(" ws utls handshake start %s via %s (mode=%d, profile=%s, timeout=%.1fs)", domain, dialAddr, mode, profile.Str(), handshakeTimeout.Seconds())
-		if err := uConn.HandshakeContext(handshakeCtx); err != nil {
-			rawConn.Close()
-			logDebug.Printf(" ws utls fail %s via %s (mode=%d): %s", domain, dialAddr, mode, compactConnError(err))
-			return nil, err
-		}
-		logDebug.Printf(" ws utls handshake ok %s via %s (mode=%d)", domain, dialAddr, mode)
-		_ = uConn.SetDeadline(time.Time{})
-		rawConn = uConn
+	tlsConn := tls.Client(rawConn, tlsCfg)
+	_ = tlsConn.SetDeadline(time.Now().Add(handshakeTimeout))
+	if err := tlsConn.HandshakeContext(handshakeCtx); err != nil {
+		rawConn.Close()
+		logDebug.Printf(" ws tls fail %s via %s: %s", domain, dialAddr, compactConnError(err))
+		return nil, err
 	}
+	_ = tlsConn.SetDeadline(time.Time{})
+	rawConn = tlsConn
 
 	wsKeyBytes := make([]byte, 16)
 	_, _ = rand.Read(wsKeyBytes)
@@ -1902,6 +1872,9 @@ func isPoolEntryUsable(e *poolEntry, now int64) bool {
 }
 
 func (p *WsPool) Get(ctx context.Context, dc int, isMedia bool, targetIP string, domains []string) *RawWebSocket {
+	if !isNetworkOnline.Load() {
+		return nil
+	}
 	slot := dcSlot{dc, isMediaInt(isMedia)}
 	q, s := p.getQueue(slot)
 	now := time.Now().Unix()
@@ -1924,15 +1897,24 @@ func (p *WsPool) Get(ctx context.Context, dc int, isMedia bool, targetIP string,
 		break
 	}
 
-	if s.CompareAndSwap(0, 1) {
-		go p.refill(ctx, slot, q, s, targetIP, domains)
+	if isNetworkOnline.Load() && !isPowerSaveMode.Load() {
+		if s.CompareAndSwap(0, 1) {
+			go p.refill(ctx, slot, q, s, targetIP, domains)
+		}
 	}
 	return ws
 }
 
 func (p *WsPool) refill(ctx context.Context, slot dcSlot, q chan *poolEntry, s *atomic.Int32, targetIP string, domains []string) {
 	defer s.Store(0)
-	needed := int(poolSize.Load()) - len(q)
+	if !isNetworkOnline.Load() {
+		return
+	}
+	sz := int(poolSize.Load())
+	if isPowerSaveMode.Load() {
+		sz = 0
+	}
+	needed := sz - len(q)
 	if needed <= 0 {
 		return
 	}
@@ -1944,9 +1926,15 @@ func (p *WsPool) refill(ctx context.Context, slot dcSlot, q chan *poolEntry, s *
 			return
 		default:
 		}
+		if !isNetworkOnline.Load() {
+			return
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if !isNetworkOnline.Load() {
+				return
+			}
 			if ws := connectOneWS(ctx, targetIP, domains); ws != nil {
 				now := time.Now().Unix()
 				select {
@@ -1963,6 +1951,9 @@ func (p *WsPool) refill(ctx context.Context, slot dcSlot, q chan *poolEntry, s *
 }
 
 func (p *WsPool) Warmup(ctx context.Context, dcOptMap map[int]string) {
+	if !isNetworkOnline.Load() || isPowerSaveMode.Load() {
+		return
+	}
 	for dc, targetIP := range dcOptMap {
 		if targetIP == "" {
 			continue
@@ -2041,40 +2032,28 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 
 	// WS keepalive: periodic ping to detect dead connections
 	lastActivity := time.Now()
-	var activityMu sync.Mutex
-
 	go func() {
-		const (
-			pingIntervalMin       = 15 * time.Second
-			pingIdleSendThreshold = 10 * time.Second
-		)
-		interval := bridgePingInterval // start at 30s
-		ticker := time.NewTicker(interval)
+		pingInterval := 60 * time.Second
+		if isPowerSaveMode.Load() {
+			pingInterval = 90 * time.Second
+		}
+		ticker := time.NewTicker(pingInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx2.Done():
 				return
 			case <-ticker.C:
+				if !isNetworkOnline.Load() {
+					continue
+				}
 				activityMu.Lock()
 				idle := time.Since(lastActivity)
 				activityMu.Unlock()
-				if idle > pingIdleSendThreshold {
+				if idle >= 45*time.Second {
 					if err := ws.SendPing(); err != nil {
 						cancel()
 						return
-					}
-					// Shrink interval when idle so dead connections are
-					// detected faster.
-					if interval > pingIntervalMin {
-						interval = pingIntervalMin
-						ticker.Reset(interval)
-					}
-				} else {
-					// Restore the normal interval once activity resumes.
-					if interval != bridgePingInterval {
-						interval = bridgePingInterval
-						ticker.Reset(interval)
 					}
 				}
 			}
@@ -2218,6 +2197,9 @@ func bridgeTCP(ctx context.Context, client, remote net.Conn,
 func tcpFallback(ctx context.Context, client net.Conn, dst string, port int,
 	init []byte, label string, dc int, isMedia bool, cltDec, cltEnc, tgEnc, tgDec cipher.Stream) bool {
 
+	if !isNetworkOnline.Load() {
+		return false
+	}
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 60 * time.Second,
@@ -2235,13 +2217,19 @@ func tcpFallback(ctx context.Context, client net.Conn, dst string, port int,
 }
 
 func dialTimeout() float64 {
-	if bypassMode.Load() != 0 {
-		return 12.0
+	if !isNetworkOnline.Load() {
+		return 1.5
+	}
+	if isPowerSaveMode.Load() {
+		return 4.0
 	}
 	return 5.0
 }
 
 func tryCfproxyBaseDomain(ctx context.Context, dc int, baseDomain string) (*RawWebSocket, string) {
+	if !isNetworkOnline.Load() {
+		return nil, ""
+	}
 	baseDomain = normalizeCfDomain(baseDomain)
 	if baseDomain == "" {
 		return nil, ""
@@ -3129,9 +3117,18 @@ func SetPoolSize(size C.int) {
 	poolSize.Store(n)
 }
 
-//export SetBypassMode
-func SetBypassMode(mode C.int) {
-	bypassMode.Store(int32(mode))
+//export SetNetworkOnline
+func SetNetworkOnline(online C.int) {
+	isOnline := int(online) != 0
+	isNetworkOnline.Store(isOnline)
+	if !isOnline {
+		wsPool.CloseAll()
+	}
+}
+
+//export SetPowerSaveMode
+func SetPowerSaveMode(enabled C.int) {
+	isPowerSaveMode.Store(int(enabled) != 0)
 }
 
 //export SetCfProxyCacheDir

@@ -12,7 +12,8 @@ interface ProxyLibrary : Library {
     fun StartProxy(host: String, port: Int, dcIps: String, secret: String, verbose: Int): Int
     fun StopProxy(): Int
     fun SetPoolSize(size: Int)
-    fun SetBypassMode(mode: Int)
+    fun SetNetworkOnline(online: Int)
+    fun SetPowerSaveMode(enabled: Int)
     fun SetCfProxyCacheDir(cacheDir: String)
     fun SetCfProxyConfig(enabled: Int, priority: Int, userDomain: String)
     fun SetFakeTls(enabled: Int, domain: String)
@@ -40,8 +41,12 @@ object NativeProxy {
         ProxyLibrary.INSTANCE.SetPoolSize(size)
     }
 
-    fun setBypassMode(mode: Int) {
-        ProxyLibrary.INSTANCE.SetBypassMode(mode)
+    fun setNetworkOnline(online: Boolean) {
+        ProxyLibrary.INSTANCE.SetNetworkOnline(if (online) 1 else 0)
+    }
+
+    fun setPowerSaveMode(enabled: Boolean) {
+        ProxyLibrary.INSTANCE.SetPowerSaveMode(if (enabled) 1 else 0)
     }
 
     fun setCfProxyCacheDir(cacheDir: String) {

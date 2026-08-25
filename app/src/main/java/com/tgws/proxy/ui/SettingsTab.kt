@@ -268,7 +268,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
     val savedCustomDomain by settingsStore.customCfDomain.collectAsStateWithLifecycle(initialValue = "")
     val autoStartOnBoot by settingsStore.autoStartOnBoot.collectAsStateWithLifecycle(initialValue = false)
     val savedSecretKey by settingsStore.secretKey.collectAsStateWithLifecycle(initialValue = "LOADING")
-    val savedBypassMode by settingsStore.bypassMode.collectAsStateWithLifecycle(initialValue = 0)
+    val savedPowerSaverEnabled by settingsStore.powerSaverEnabled.collectAsStateWithLifecycle(initialValue = true)
 
     if (!isReady) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -301,7 +301,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
     var customCfDomainEnabled by rememberSaveable(savedCustomDomainEnabled) { mutableStateOf(savedCustomDomainEnabled) }
     var customCfDomain by rememberSaveable(savedCustomDomain) { mutableStateOf(savedCustomDomain) }
     var secretKeyText by remember(savedSecretKey) { mutableStateOf(if (savedSecretKey == "LOADING") "" else savedSecretKey) }
-    var bypassMode by rememberSaveable(savedBypassMode) { mutableIntStateOf(savedBypassMode) }
+    var powerSaverEnabled by rememberSaveable(savedPowerSaverEnabled) { mutableStateOf(savedPowerSaverEnabled) }
 
     LaunchedEffect(savedSecretKey) {
         if (savedSecretKey == "") {
@@ -323,7 +323,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 dc1mText, dc2mText, dc3mText, dc4mText, dc5mText, dc203mText,
                 experimentalMode, portText, selectedPoolSize,
                 cfEnabled, customCfDomainEnabled, customCfDomain, secretKeyText,
-                bypassMode,
+                powerSaverEnabled,
             )
         }
     }
@@ -437,7 +437,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
             SectionHeader(
                 icon = Icons.Default.Shield,
                 title = "Обход блокировок",
-                subtitle = "CloudFlare CDN, транспорт uTLS",
+                subtitle = "CloudFlare CDN, WebSocket туннелирование",
             )
 
             SwitchSettingRow(
@@ -455,66 +455,16 @@ fun SettingsTab(settingsStore: SettingsStore) {
 
             SoftDivider()
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    Icons.Default.Bolt,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    "Транспорт",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            var bypassExpanded by remember { mutableStateOf(false) }
-            val bypassOptions = listOf(
-                "Классический" to 0,
-                "uTLS Chrome" to 1,
-                "uTLS Firefox" to 2,
-                "uTLS Рандомный" to 3,
+            SwitchSettingRow(
+                icon = Icons.Default.Bolt,
+                title = "Режим энергосбережения",
+                subtitle = "Оптимизация пинга, сон радиомодема и пауза без сети",
+                checked = powerSaverEnabled,
+                onCheckedChange = {
+                    powerSaverEnabled = it
+                    scheduleSave()
+                },
             )
-            ExposedDropdownMenuBox(
-                expanded = bypassExpanded,
-                onExpandedChange = { bypassExpanded = !bypassExpanded },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                OutlinedTextField(
-                    modifier = Modifier.menuAnchor().fillMaxWidth().height(56.dp),
-                    readOnly = true,
-                    value = bypassOptions.first { it.second == bypassMode }.first,
-                    onValueChange = {},
-                    label = { Text("Режим TLS-маскировки") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bypassExpanded) },
-                    shape = AppShapes.Large,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                    ),
-                )
-                ExposedDropdownMenu(
-                    expanded = bypassExpanded,
-                    onDismissRequest = { bypassExpanded = false },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    bypassOptions.forEach { (label, value) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                bypassMode = value
-                                bypassExpanded = false
-                                scheduleSave()
-                            },
-                        )
-                    }
-                }
-            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))

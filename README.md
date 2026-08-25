@@ -9,12 +9,14 @@ Android-приложение для запуска TG WS Proxy прямо на �
 ## Возможности
 
 - **Прямое WS-подключение** к Telegram DC с автоматическим MTProto-packet splitting
-- **uTLS browser fingerprinting** — Chrome / Firefox / Safari / Random (режимы 0–3) для обхода TLS-отпечатков
+- **Оптимизированный TLS 1.2/1.3** — стандартный высокопроизводительный стек `crypto/tls` со стабильным ALPN (`http/1.1`)
+- **Умное энергосбережение (Power Saving)** — адаптивный пинг радиомодема (DRX), кратковременные WakeLock и динамическое управление пулом соединений
+- **Мониторинг сети (Network Awareness)** — мгновенная пауза при отсутствии интернета и предотвращение тайм-аут штормов
+- **Push-уведомления о релизах** — автоматическое уведомление при появлении новой версии на GitHub
 - **Cloudflare-прокси fallback** — автоматическое переключение при блокировке WS с балансировкой доменов, кешированием списка из GitHub и exponential backoff при 429
 - **DoH-резолвинг** через Cloudflare, Google, Quad9, AdGuard (с кешированием 15 мин)
 - **Connection pooling** — пул предустановленных WS-соединений с периодическим probe (до 16 на DC)
 - **Fake TLS** (ee-secret) — маскирование прокси-трафика под TLS-соединение
-- **Адаптивный keepalive** — 30s → 15s при простое, восстановление при активности
 - **Quick Settings Tile** — включение/выключение из шторки
 - **Автозапуск** при загрузке устройства
 - **DataStore** — персистентное хранение настроек
@@ -26,11 +28,11 @@ Android-приложение для запуска TG WS Proxy прямо на �
 | UI | Jetpack Compose, Material 3, Single-Activity |
 | Архитектура | MVVM (ViewModel + StateFlow) |
 | Навигация | Compose Navigation + BottomBar |
-| Фоновая работа | Foreground Service (`dataSync`) |
+| Фоновая работа | Foreground Service (`dataSync` / `specialUse`) |
 | Хранение | DataStore Preferences |
 | Движок прокси | Go 1.24 (CGO/JNI, нативные `.so`) |
 | WS-библиотека | Кастомный `RawWebSocket` (без gorilla) |
-| TLS | `refraction-networking/utls` v1.8.2 |
+| TLS | Go `crypto/tls` (TLS 1.2/1.3, ALPN) |
 | Шрифты | Inter (Regular, Medium, Semibold, Bold) |
 | Локализация | Русский / English |
 | Min SDK | 24 (Android 7.0) |
