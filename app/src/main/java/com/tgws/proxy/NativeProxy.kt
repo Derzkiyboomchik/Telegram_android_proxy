@@ -1,12 +1,15 @@
 package com.tgws.proxy
 
+import android.util.Log
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 
 interface ProxyLibrary : Library {
     companion object {
-        val INSTANCE = Native.load("tgwsproxy", ProxyLibrary::class.java) as ProxyLibrary
+        val INSTANCE: ProxyLibrary by lazy {
+            Native.load("tgwsproxy", ProxyLibrary::class.java) as ProxyLibrary
+        }
     }
 
     fun StartProxy(host: String, port: Int, dcIps: String, secret: String, verbose: Int): Int
@@ -23,60 +26,105 @@ interface ProxyLibrary : Library {
 }
 
 object NativeProxy {
+    private const val TAG = "NativeProxy"
     private val lock = Any()
 
     fun startProxy(host: String, port: Int, dcIps: String, secret: String, verbose: Int): Int {
-        synchronized(lock) {
-            return ProxyLibrary.INSTANCE.StartProxy(host, port, dcIps, secret, verbose)
+        return synchronized(lock) {
+            try {
+                ProxyLibrary.INSTANCE.StartProxy(host, port, dcIps, secret, verbose)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to call StartProxy", e)
+                -1
+            }
         }
     }
 
     fun stopProxy(): Int {
-        synchronized(lock) {
-            return ProxyLibrary.INSTANCE.StopProxy()
+        return synchronized(lock) {
+            try {
+                ProxyLibrary.INSTANCE.StopProxy()
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to call StopProxy", e)
+                -1
+            }
         }
     }
 
     fun setPoolSize(size: Int) {
-        ProxyLibrary.INSTANCE.SetPoolSize(size)
+        try {
+            ProxyLibrary.INSTANCE.SetPoolSize(size)
+        } catch (e: Throwable) {
+            Log.w(TAG, "SetPoolSize not available in native library", e)
+        }
     }
 
     fun setNetworkOnline(online: Boolean) {
-        ProxyLibrary.INSTANCE.SetNetworkOnline(if (online) 1 else 0)
+        try {
+            ProxyLibrary.INSTANCE.SetNetworkOnline(if (online) 1 else 0)
+        } catch (e: Throwable) {
+            Log.w(TAG, "SetNetworkOnline not available in native library", e)
+        }
     }
 
     fun setPowerSaveMode(enabled: Boolean) {
-        ProxyLibrary.INSTANCE.SetPowerSaveMode(if (enabled) 1 else 0)
+        try {
+            ProxyLibrary.INSTANCE.SetPowerSaveMode(if (enabled) 1 else 0)
+        } catch (e: Throwable) {
+            Log.w(TAG, "SetPowerSaveMode not available in native library", e)
+        }
     }
 
     fun setCfProxyCacheDir(cacheDir: String) {
-        ProxyLibrary.INSTANCE.SetCfProxyCacheDir(cacheDir)
+        try {
+            ProxyLibrary.INSTANCE.SetCfProxyCacheDir(cacheDir)
+        } catch (e: Throwable) {
+            Log.w(TAG, "SetCfProxyCacheDir not available in native library", e)
+        }
     }
 
     fun setCfProxyConfig(enabled: Boolean, priority: Boolean, userDomain: String) {
-        ProxyLibrary.INSTANCE.SetCfProxyConfig(
-            if (enabled) 1 else 0,
-            if (priority) 1 else 0,
-            userDomain
-        )
+        try {
+            ProxyLibrary.INSTANCE.SetCfProxyConfig(
+                if (enabled) 1 else 0,
+                if (priority) 1 else 0,
+                userDomain
+            )
+        } catch (e: Throwable) {
+            Log.w(TAG, "SetCfProxyConfig not available in native library", e)
+        }
     }
 
     fun setFakeTls(enabled: Boolean, domain: String = "") {
-        ProxyLibrary.INSTANCE.SetFakeTls(if (enabled) 1 else 0, domain)
+        try {
+            ProxyLibrary.INSTANCE.SetFakeTls(if (enabled) 1 else 0, domain)
+        } catch (e: Throwable) {
+            Log.w(TAG, "SetFakeTls not available in native library", e)
+        }
     }
 
     /** Returns the full secret with correct prefix (dd or ee+domain_hex) */
     fun getSecretWithPrefix(): String? {
-        val ptr = ProxyLibrary.INSTANCE.GetSecretWithPrefix() ?: return null
-        val res = ptr.getString(0)
-        ProxyLibrary.INSTANCE.FreeString(ptr)
-        return res
+        return try {
+            val ptr = ProxyLibrary.INSTANCE.GetSecretWithPrefix() ?: return null
+            val res = ptr.getString(0)
+            ProxyLibrary.INSTANCE.FreeString(ptr)
+            res
+        } catch (e: Throwable) {
+            Log.w(TAG, "GetSecretWithPrefix error", e)
+            null
+        }
     }
 
     fun getStats(): String? {
-        val ptr = ProxyLibrary.INSTANCE.GetStats() ?: return null
-        val res = ptr.getString(0)
-        ProxyLibrary.INSTANCE.FreeString(ptr)
-        return res
+        return try {
+            val ptr = ProxyLibrary.INSTANCE.GetStats() ?: return null
+            val res = ptr.getString(0)
+            ProxyLibrary.INSTANCE.FreeString(ptr)
+            res
+        } catch (e: Throwable) {
+            Log.w(TAG, "GetStats error", e)
+            null
+        }
     }
 }
