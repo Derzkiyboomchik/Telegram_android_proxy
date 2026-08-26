@@ -2031,7 +2031,8 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 	wg.Add(2)
 
 	// WS keepalive: periodic ping to detect dead connections
-	lastActivity := time.Now()
+	var lastActivityUnix atomic.Int64
+	lastActivityUnix.Store(time.Now().Unix())
 	go func() {
 		pingInterval := 60 * time.Second
 		if isPowerSaveMode.Load() {
@@ -2047,10 +2048,8 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 				if !isNetworkOnline.Load() {
 					continue
 				}
-				activityMu.Lock()
-				idle := time.Since(lastActivity)
-				activityMu.Unlock()
-				if idle >= 45*time.Second {
+				idleSec := time.Now().Unix() - lastActivityUnix.Load()
+				if idleSec >= 45 {
 					if err := ws.SendPing(); err != nil {
 						cancel()
 						return
@@ -2076,9 +2075,7 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 				chunk := buf[:n]
 				stats.bytesUp.Add(int64(n))
 
-				activityMu.Lock()
-				lastActivity = time.Now()
-				activityMu.Unlock()
+				lastActivityUnix.Store(time.Now().Unix())
 
 				cltDec.XORKeyStream(chunk, chunk)
 				tgEnc.XORKeyStream(chunk, chunk)
@@ -2130,9 +2127,7 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 			n := len(data)
 			stats.bytesDown.Add(int64(n))
 
-			activityMu.Lock()
-			lastActivity = time.Now()
-			activityMu.Unlock()
+			lastActivityUnix.Store(time.Now().Unix())
 
 			tgDec.XORKeyStream(data, data)
 			cltEnc.XORKeyStream(data, data)
