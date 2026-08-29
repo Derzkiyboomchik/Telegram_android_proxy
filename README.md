@@ -1,25 +1,27 @@
 # TG WS Proxy Android
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Derzkiyboomchik/Telegram_android_proxy?include_prereleases&color=blue)](https://github.com/Derzkiyboomchik/Telegram_android_proxy/releases)
 
-Android-приложение для запуска TG WS Proxy прямо на устройстве. Проксирует MTProto-трафик Telegram через WebSocket (`wss://kws*.web.telegram.org/apiws`), обходя DPI-фильтрацию. При прямом WS недоступности автоматически переключается на Cloudflare-прокси или TCP-fallback.
+Android-приложение для запуска локального TG WS Proxy прямо на смартфоне. Проксирует MTProto-трафик Telegram через WebSocket (`wss://kws*.web.telegram.org/apiws`), эффективно обходя DPI-фильтрацию. При недоступности прямого WebSocket автоматически переключается на Cloudflare CDN проксирование или TCP-fallback.
 
-Встроенный Go-движок с CGO (JNI) обеспечивает нативную производительность. Приложение работает как VPN-подобный интерфейс с одной большой кнопкой включения/выключения.
+Встроенный высокопроизводительный Go-движок с CGO обеспечивает нативную скорость и минимальное энергопотребление.
 
 ## Возможности
 
-- **Прямое WS-подключение** к Telegram DC с автоматическим MTProto-packet splitting
-- **Оптимизированный TLS 1.2/1.3** — стандартный высокопроизводительный стек `crypto/tls` со стабильным ALPN (`http/1.1`)
-- **Умное энергосбережение (Power Saving)** — адаптивный пинг радиомодема (DRX), кратковременные WakeLock и динамическое управление пулом соединений
-- **Мониторинг сети (Network Awareness)** — мгновенная пауза при отсутствии интернета и предотвращение тайм-аут штормов
-- **Push-уведомления о релизах** — автоматическое уведомление при появлении новой версии на GitHub
-- **Cloudflare-прокси fallback** — автоматическое переключение при блокировке WS с балансировкой доменов, кешированием списка из GitHub и exponential backoff при 429
-- **DoH-резолвинг** через Cloudflare, Google, Quad9, AdGuard (с кешированием 15 мин)
-- **Connection pooling** — пул предустановленных WS-соединений с периодическим probe (до 16 на DC)
-- **Fake TLS** (ee-secret) — маскирование прокси-трафика под TLS-соединение
-- **Quick Settings Tile** — включение/выключение из шторки
-- **Автозапуск** при загрузке устройства
-- **DataStore** — персистентное хранение настроек
+- **Прямое WebSocket-подключение** к серверам Telegram с автоматическим MTProto packet splitting
+- **Поддержка 16 клиентов Telegram** — автоопределение установленных приложений и быстрое подключение в один клик:
+  * *Official Telegram, Telegram Beta, Telegram Direct (Web APK), Telegram X, Plus Messenger, AyuGram, NekoX, ForkClient, Forkgram, iMe Messenger, Kotatogram, BGram, Cherrygram, MDGram, Turrit, Teleplus*
+- **Нативное подключение (MTProto Scheme)** — мгновенная активация прокси в Telegram без лишних окон
+- **Плавная орбитальная анимация** — аппаратный бесшовный 360° рендеринг орбит, траекторий и звёздных частиц
+- **Cloudflare CDN fallback** — автоматический обход блокировок с динамической балансировкой доменов и exponential backoff
+- **DoH-резолвинг** через Cloudflare, Google, Quad9, AdGuard с кешированием
+- **Умное энергосбережение** — адаптивный пинг радиомодема, освобождение WakeLock и оптимизация фоновой работы
+- **Connection Pooling** — предварительно прогретый пул соединений для мгновенной отправки сообщений
+- **Fake TLS** (ee-secret) — маскировка прокси-трафика под TLS
+- **Quick Settings Tile** — быстрое включение/выключение прямо из шторки Android
+- **Автозапуск** при старте системы
+- **Уведомления о новых релизах** — проверка обновлений на GitHub
 
 ## Технический стек
 
@@ -28,29 +30,19 @@ Android-приложение для запуска TG WS Proxy прямо на �
 | UI | Jetpack Compose, Material 3, Single-Activity |
 | Архитектура | MVVM (ViewModel + StateFlow) |
 | Навигация | Compose Navigation + BottomBar |
-| Фоновая работа | Foreground Service (`dataSync` / `specialUse`) |
-| Хранение | DataStore Preferences |
-| Движок прокси | Go 1.24 (CGO/JNI, нативные `.so`) |
-| WS-библиотека | Кастомный `RawWebSocket` (без gorilla) |
-| TLS | Go `crypto/tls` (TLS 1.2/1.3, ALPN) |
-| Шрифты | Inter (Regular, Medium, Semibold, Bold) |
-| Локализация | Русский / English |
+| Фоновая служба | Foreground Service (`specialUse`) |
+| Хранилище | DataStore Preferences |
+| Движок | Go 1.23+ (CGO, нативная сборка `libtgwsproxy.so` для arm64, armv7, x86_64) |
+| Сеть | Кастомный `RawWebSocket` + Go `crypto/tls` (TLS 1.2/1.3) |
+| Шрифты | Inter |
 | Min SDK | 24 (Android 7.0) |
-| Target SDK | 34 |
-
-## Оптимизации движка (последний коммит)
-
-- **O(N) MTProto splitting** — zero-copy парсинг пакетов без реаллокаций буфера
-- **Рандомизация CF-доменов** — `rand/v2.Shuffle` для равномерного распределения нагрузки
-- **Обновлённый WS handshake** — актуальный Chrome UA, `Sec-WebSocket-Extensions`, `Accept-Encoding/Language`
-- **DoH TTL 15 мин** — снижение задержки при CF fallback
-- **Адаптивный keepalive** — быстрое обнаружение мёртвых соединений без лишнего трафика
+| Target SDK | 34 (Android 14) |
 
 ## Архитектура
 
 ```
 ┌─────────────────────────────────┐
-│         Telegram Client         │
+│     Telegram / Fork Client      │
 │   (MTProto over local proxy)    │
 └──────────────┬──────────────────┘
                │ 127.0.0.1:1443
@@ -79,150 +71,40 @@ Android-приложение для запуска TG WS Proxy прямо на �
      / CF proxy / TCP fallback
 ```
 
-## Экраны
+## Экраны приложения
 
 | Таб | Описание |
 |---|---|
-| **Запуск** | Главная кнопка с логотипом Telegram, статус подключения, кнопки запуска Telegram/Beta, панель CF/Пул/Порт, ссылка на прокси |
-| **Настройки** | Порт, секрет, CF-прокси, пул, bypass-режим (uTLS), fake TLS, автовыгрузка, автозапуск, выбор палитры |
-| **Логи** | Терминальный лог событий с фильтрами INFO/ERROR/NULL, моноширинный шрифт, автоскролл |
+| **Запуск** | Кнопка старта с орбитальной космической анимацией, статус, единая кнопка подключения к 16 клиентам Telegram и копирования ссылки, плашки статистики |
+| **Настройки** | Настройка портов, ключей, Cloudflare CDN, пула соединений, Fake TLS, автозапуска и выбор тем оформления |
+| **Логи** | Терминальный лог событий с фильтрацией (INFO / ERROR / NULL), автоскроллом и возможностью копирования |
 
-## Темы и палитры
+## Темы оформления
 
-- **System** — динамические цвета Material You (Android 12+)
-- **Indigo** — фиолетовая светлая / тёмная
-- **Espresso** — тёплая коричневая «раф на кокосовом молоке» / «эспрессо»
-- **Forest** — зелёная приглушённая
-- **Cyber** — тёмная неоновая «Telegram Neon» с `#2AABEE` акцентом
+- **Системная** — гармоничная адаптация под светлую или тёмную тему
+- **Aurora** — космическая палитра с неоновыми оттенками
+- **Sunset** — тёплые вечерние тона
+- **Graphite** — строгая монохромная тема
 
-## Структура проекта
-
-```
-├── app/src/main/
-│   ├── java/com/tgws/proxy/
-│   │   ├── App.kt                     # Application, DataStore init
-│   │   ├── MainActivity.kt            # Single Activity, navigation, bottom bar
-│   │   ├── ProxyController.kt         # Start/stop прокси, JNI-вызовы
-│   │   ├── ProxyService.kt            # Foreground service, notification
-│   │   ├── SettingsStore.kt           # DataStore обёртка
-│   │   ├── LogEntry.kt                # Модель лог-записи
-│   │   ├── BootReceiver.kt            # Автозапуск
-│   │   ├── ProxyTileService.kt        # Quick Settings tile
-│   │   ├── NativeProxy.kt             # JNI bridge
-│   │   └── ui/
-│   │       ├── Theme.kt               # 5 палитр, Inter типография, AppColors
-│   │       ├── ConnectionTab.kt       # Главная: кнопка, статус, Telegram launch
-│   │       ├── SettingsTab.kt         # Настройки: порты, CF, bypass, fake TLS
-│   │       ├── LogsTab.kt             # Терминальный лог
-│   │       ├── ChatBackground.kt      # Анимированные чат-пузыри на фоне
-│   │       ├── AppSectionCard.kt      # Переиспользуемая карточка с градиентом
-│   │       ├── FloatingToolbar.kt     # Плавающая панель статистики
-│   │       └── ExternalLinks.kt       # Ссылки на GitHub, донаты
-│   ├── jniLibs/
-│   │   ├── arm64-v8a/libtgwsproxy.so
-│   │   ├── armeabi-v7a/libtgwsproxy.so
-│   │   └── x86_64/libtgwsproxy.so
-│   └── res/
-│       ├── drawable/ic_telegram_logo.xml
-│       ├── font/inter_*.ttf
-│       └── ...
-├── tg-ws-proxy.go                     # Go-исходник движка (CGO, ~3100 строк)
-├── go.mod / go.sum
-├── build-go.sh                        # Кросс-компиляция Go → Android
-├── build-go-docker.ps1 / .bat         # Docker-сборка для Windows
-└── gradle/libs.versions.toml
-```
-
-## Сборка
-
-### Предварительные требования
-
-- Go 1.24+
-- Android Studio Hedgehog (2023.1.1)+ / JDK 17
-- Gradle 8.4+
-
-### 1. Клонирование
-
-```bash
-git clone https://github.com/Derzkiyboomchik/Telegram_android_proxy.git
-cd Telegram_android_proxy
-```
-
-### 2. Сборка Go-бинарников
-
-**Через Docker (рекомендуется):**
-
-```bash
-# PowerShell
-.\build-go-docker.ps1
-
-# Linux / macOS
-docker run --rm -v "$PWD:/workspace" -w /workspace golang:1.24-alpine sh -c "
-  apk add --no-cache git bash &&
-  bash ./build-go.sh
-"
-```
-
-**Локальный Go:**
-
-```bash
-./build-go.sh
-```
-
-**Android NDK (CGO):**
-
-```bash
-export ANDROID_NDK=/path/to/android-ndk
-CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" \
-  CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -o app/src/main/jniLibs/arm64-v8a/libtgwsproxy.so .
-```
-
-### 3. Сборка APK
-
-```bash
-./gradlew assembleDebug    # Debug
-./gradlew assembleRelease  # Release (требуется keystore.properties)
-```
-
-### 4. GitHub Actions
-
-При пуше в `main` или теге `v*` автоматически собираются Go-бинарники и APK:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-## Подписание Release APK
-
-Создайте `app/keystore.properties`:
-
-```properties
-storeFile=../my-key.jks
-storePassword=yourStorePassword
-keyAlias=yourKeyAlias
-keyPassword=yourKeyPassword
-```
-
-## Разрешения
+## Разрешения Android
 
 | Permission | Назначение |
 |---|---|
-| `INTERNET` | Работа прокси |
-| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` | Фоновый сервис |
-| `POST_NOTIFICATIONS` | Уведомление (Android 13+) |
-| `RECEIVE_BOOT_COMPLETED` | Автозапуск |
+| `INTERNET` | Работа сетевого прокси |
+| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_SPECIAL_USE` | Фоновая работа службы |
+| `POST_NOTIFICATIONS` | Системное уведомление статуса (Android 13+) |
+| `RECEIVE_BOOT_COMPLETED` | Автозапуск при включении устройства |
 
 ## Quick Settings Tile
 
-1. Раскройте шторку → «Редактировать» (карандаш)
-2. Перетащите **TG WS Proxy** в активную зону
+1. Потяните шторку быстрых настроек Android вниз → нажмите значок редактирования (карандаш).
+2. Найдите плитку **TG WS Proxy** и перетащите её в активную область.
 
 ## Лицензия
 
-MIT License. См. [LICENSE](LICENSE).
+Проект распространяется под лицензией [MIT](LICENSE).
 
 ## Благодарности
 
-- [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) — оригинальная концепция WS-прокси для Telegram
-- [spatiumstas/tg-ws-proxy-go](https://github.com/spatiumstas/tg-ws-proxy-go) — Go-реализация движка
+- [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) — концепция WebSocket-прокси для Telegram
+- [spatiumstas/tg-ws-proxy-go](https://github.com/spatiumstas/tg-ws-proxy-go) — базовая Go-реализация

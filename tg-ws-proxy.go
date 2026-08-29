@@ -40,7 +40,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -124,6 +123,7 @@ var (
 	cfproxyAttemptSem       = make(chan struct{}, cfproxyGlobalParallel)
 )
 
+
 const cfproxyDomainsURL = "https://raw.githubusercontent.com/Flowseal/tg-ws-proxy/main/.github/cfproxy-domains.txt"
 
 // MTProto proxy secret (hex, 32 chars = 16 bytes)
@@ -202,11 +202,13 @@ func resolveFallbackTarget(dc int, isMedia bool) string {
 // Logger
 // ---------------------------------------------------------------------------
 
+// Loggers default to io.Discard so exported entry points
+// (e.g. SetCfProxyConfig) are safe before initLogging runs.
 var (
-	logInfo  *log.Logger
-	logWarn  *log.Logger
-	logError *log.Logger
-	logDebug *log.Logger
+	logInfo  = log.New(io.Discard, "", 0)
+	logWarn  = log.New(io.Discard, "", 0)
+	logError = log.New(io.Discard, "", 0)
+	logDebug = log.New(io.Discard, "", 0)
 )
 
 type androidLogWriter struct{}
@@ -3149,6 +3151,7 @@ func SetCfProxyConfig(enabled C.int, priority C.int, cUserDomain *C.char) {
 	}
 }
 
+
 //export SetSecret
 func SetSecret(cSecret *C.char) {
 	s := C.GoString(cSecret)
@@ -3203,23 +3206,4 @@ func FreeString(p *C.char) {
 	C.free(unsafe.Pointer(p))
 }
 
-func main() {
-	runtime.LockOSThread()
-	initLogging(true)
-	initCfproxyDomains()
-
-	dcOptMap := map[int]string{
-		2: "149.154.167.220",
-		4: "149.154.167.220",
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
-
-	_ = runProxy(ctx, "127.0.0.1", defaultPort, dcOptMap, nil)
-}
+func main() {}

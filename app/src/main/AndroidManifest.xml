@@ -16,6 +16,20 @@
     <queries>
         <package android:name="org.telegram.messenger" />
         <package android:name="org.telegram.messenger.beta" />
+        <package android:name="org.telegram.messenger.web" />
+        <package android:name="org.thunderdog.challegram" />
+        <package android:name="org.telegram.plus" />
+        <package android:name="org.telegram.ayu" />
+        <package android:name="nekox.messenger" />
+        <package android:name="org.forkclient.messenger" />
+        <package android:name="org.forkgram.messenger" />
+        <package android:name="com.iMe.android" />
+        <package android:name="org.telegram.kotatogram" />
+        <package android:name="org.telegram.bgram" />
+        <package android:name="org.telegram.cherrygram" />
+        <package android:name="com.mdgram.messenger" />
+        <package android:name="com.turrit.telegram" />
+        <package android:name="ir.ilm.teleplus" />
     </queries>
 
     <application

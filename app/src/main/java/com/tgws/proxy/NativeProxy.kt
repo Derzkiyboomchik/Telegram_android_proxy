@@ -95,6 +95,8 @@ object NativeProxy {
         }
     }
 
+
+
     fun setFakeTls(enabled: Boolean, domain: String = "") {
         try {
             ProxyLibrary.INSTANCE.SetFakeTls(if (enabled) 1 else 0, domain)

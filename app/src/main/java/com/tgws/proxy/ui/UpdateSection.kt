@@ -57,14 +57,14 @@ import java.io.File
 /**
  * UpdateSection — Compose UI block for the in-app updater.
  *
- * Renders a glass card with:
+ * Renders a section card with:
  *   - current version + GitHub repo info
  *   - "Проверить обновления" button (manual check)
  *   - if an update is available — release notes + "Скачать и установить" button
  *   - download progress bar while downloading
  *   - auto-installs once download completes (broadcast receiver)
  *
- * The section is dropped into SettingsTab inside its own GlassCard.
+ * The section is dropped into SettingsTab inside its own AppSectionCard.
  */
 @Composable
 fun UpdateSection() {
@@ -253,7 +253,7 @@ private fun UpdateAvailableCard(
         color = scheme.primary.copy(alpha = if (isDark) 0.18f else 0.10f),
         border = androidx.compose.foundation.BorderStroke(
             0.5.dp,
-            Color.White.copy(alpha = if (isDark) 0.30f else 0.50f),
+            scheme.primary.copy(alpha = 0.35f),
         ),
     ) {
         Column(
@@ -302,6 +302,7 @@ private fun UpdateAvailableCard(
 }
 
 // Local helper used by UpdateSection — kept private to avoid collisions.
+// Telegram settings style: solid blue bubble + white icon.
 @Composable
 private fun SectionHeader(
     icon: ImageVector,
@@ -315,20 +316,16 @@ private fun SectionHeader(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Surface(
-            shape = AppShapes.Small,
-            color = scheme.primary.copy(alpha = 0.14f),
-            border = androidx.compose.foundation.BorderStroke(
-                0.5.dp,
-                Color.White.copy(alpha = 0.20f),
-            ),
-            modifier = Modifier.size(36.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xFF2AABEE),
+            modifier = Modifier.size(38.dp),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(20.dp),
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }

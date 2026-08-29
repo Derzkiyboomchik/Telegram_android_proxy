@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -26,14 +28,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Brightness2
+import androidx.compose.material.icons.filled.Brightness5
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
@@ -68,6 +76,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -85,82 +94,41 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-val telegramApps = listOf(
-    "org.telegram.messenger",
-    "org.thunderdog.challegram",
-    "com.radolyn.ayugram",
-    "app.exteragram.messenger",
-    "ir.ilmili.telegraph",
-    "org.telegram.plus",
-    "tw.nekomimi.nekogram",
-    "tw.nekomimi.nekogramx",
-    "org.telegram.mdgram",
-    "com.iMe.android",
-    "app.nicegram",
-    "org.telegram.bgram",
-    "cc.modery.cherrygram",
-    "io.github.nextalone.nagram",
-)
-
 private fun generateRandomSecret(): String {
     val bytes = ByteArray(16)
     java.security.SecureRandom().nextBytes(bytes)
     return bytes.joinToString("") { "%02x".format(it) }
 }
 
-fun openTelegram(context: Context, url: String) {
-    val pm = context.packageManager
-    val uri = Uri.parse(url)
-    for (pkg in telegramApps) {
-        try {
-            pm.getPackageInfo(pkg, 0)
-            val intent = Intent(Intent.ACTION_VIEW, uri)
-            intent.setPackage(pkg)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            return
-        } catch (_: PackageManager.NameNotFoundException) {
-        } catch (_: Exception) {
-        }
-    }
-    try {
-        val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
-        fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(fallbackIntent)
-    } catch (_: Exception) {
-        Toast.makeText(context, "Telegram не найден!", Toast.LENGTH_SHORT).show()
-    }
-}
-
 // ════════════════════════════════════════════════════════════════════════════
-// Section header — used inside GlassCard to introduce a sub-group
+// Section header — Telegram settings style: solid accent bubble (rounded
+// square, white icon) + title/subtitle inside the card
 // ════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun SectionHeader(
     icon: ImageVector,
     title: String,
     subtitle: String? = null,
+    accent: Color = Color(0xFF2AABEE),
 ) {
     val scheme = MaterialTheme.colorScheme
-    val tokens = AppTheme.glass
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        // Icon "chip" — glass pill
+        // Accent bubble — solid color rounded square with a white icon
         Surface(
-            shape = AppShapes.Small,
-            color = tokens.accent.copy(alpha = 0.14f),
-            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.20f)),
-            modifier = Modifier.size(36.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = accent,
+            modifier = Modifier.size(38.dp),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = tokens.accent,
-                    modifier = Modifier.size(20.dp),
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
@@ -192,9 +160,11 @@ private fun SwitchSettingRow(
     subtitle: String,
     checked: Boolean,
     enabled: Boolean = true,
+    accent: Color? = null,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val iconTint = accent ?: scheme.primary
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -203,7 +173,7 @@ private fun SwitchSettingRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (enabled) scheme.primary else scheme.onSurface.copy(alpha = 0.35f),
+            tint = if (enabled) iconTint else scheme.onSurface.copy(alpha = 0.35f),
             modifier = Modifier.size(20.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -235,8 +205,15 @@ private fun SoftDivider() {
     )
 }
 
+// Telegram-style section accents
+private val AccentBlue = Color(0xFF2AABEE)
+private val AccentOrange = Color(0xFFFF9500)
+private val AccentGreen = Color(0xFF34C759)
+private val AccentPurple = Color(0xFFAF52DE)
+private val AccentGray = Color(0xFF8E8E93)
+
 // ════════════════════════════════════════════════════════════════════════════
-// SettingsTab — Liquid Glass variant. NO donate row.
+// SettingsTab — Telegram settings style. NO donate row.
 // ════════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -268,7 +245,11 @@ fun SettingsTab(settingsStore: SettingsStore) {
     val savedCustomDomain by settingsStore.customCfDomain.collectAsStateWithLifecycle(initialValue = "")
     val autoStartOnBoot by settingsStore.autoStartOnBoot.collectAsStateWithLifecycle(initialValue = false)
     val savedSecretKey by settingsStore.secretKey.collectAsStateWithLifecycle(initialValue = "LOADING")
-    val savedPowerSaverEnabled by settingsStore.powerSaverEnabled.collectAsStateWithLifecycle(initialValue = true)
+
+    // Appearance (migrated from the old floating theme toolbar)
+    val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = "system")
+    val isDynamicColor by settingsStore.isDynamicColor.collectAsStateWithLifecycle(initialValue = true)
+    val themePalette by settingsStore.themePalette.collectAsStateWithLifecycle(initialValue = "aurora")
 
     if (!isReady) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -301,7 +282,6 @@ fun SettingsTab(settingsStore: SettingsStore) {
     var customCfDomainEnabled by rememberSaveable(savedCustomDomainEnabled) { mutableStateOf(savedCustomDomainEnabled) }
     var customCfDomain by rememberSaveable(savedCustomDomain) { mutableStateOf(savedCustomDomain) }
     var secretKeyText by remember(savedSecretKey) { mutableStateOf(if (savedSecretKey == "LOADING") "" else savedSecretKey) }
-    var powerSaverEnabled by rememberSaveable(savedPowerSaverEnabled) { mutableStateOf(savedPowerSaverEnabled) }
 
     LaunchedEffect(savedSecretKey) {
         if (savedSecretKey == "") {
@@ -322,8 +302,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 isDcAuto, dc1Text, dc2Text, dc3Text, dc4Text, dc5Text, dc203Text,
                 dc1mText, dc2mText, dc3mText, dc4mText, dc5mText, dc203mText,
                 experimentalMode, portText, selectedPoolSize,
-                cfEnabled, customCfDomainEnabled, customCfDomain, secretKeyText,
-                powerSaverEnabled,
+                cfEnabled, customCfDomainEnabled, customCfDomain, secretKeyText
             )
         }
     }
@@ -376,6 +355,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 icon = Icons.Default.Public,
                 title = "Подключение",
                 subtitle = "Порт, DC-адреса, автозапуск",
+                accent = AccentBlue,
             )
 
             OutlinedTextField(
@@ -424,6 +404,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 title = "Автозапуск при включении",
                 subtitle = "Запускать прокси после загрузки устройства",
                 checked = autoStartOnBoot,
+                accent = AccentBlue,
                 onCheckedChange = { enabled ->
                     scope.launch { settingsStore.saveAutoStartOnBoot(enabled) }
                 },
@@ -438,6 +419,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 icon = Icons.Default.Shield,
                 title = "Обход блокировок",
                 subtitle = "CloudFlare CDN, WebSocket туннелирование",
+                accent = AccentOrange,
             )
 
             SwitchSettingRow(
@@ -446,22 +428,10 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 subtitle = "Проксировать через домены CF",
                 checked = cfEnabled,
                 enabled = !isRunning,
+                accent = AccentOrange,
                 onCheckedChange = {
                     cfEnabled = it
                     isDcAuto = it
-                    scheduleSave()
-                },
-            )
-
-            SoftDivider()
-
-            SwitchSettingRow(
-                icon = Icons.Default.Bolt,
-                title = "Режим энергосбережения",
-                subtitle = "Оптимизация пинга, сон радиомодема и пауза без сети",
-                checked = powerSaverEnabled,
-                onCheckedChange = {
-                    powerSaverEnabled = it
                     scheduleSave()
                 },
             )
@@ -475,6 +445,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 icon = Icons.Default.Workspaces,
                 title = "Производительность",
                 subtitle = "Размер пула WebSocket-соединений",
+                accent = AccentGreen,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -503,6 +474,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 icon = Icons.Default.VpnKey,
                 title = "Секретный ключ",
                 subtitle = "Уникальный идентификатор прокси",
+                accent = AccentPurple,
             )
             OutlinedTextField(
                 value = secretKeyText,
@@ -534,6 +506,61 @@ fun SettingsTab(settingsStore: SettingsStore) {
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        // ── Group: Оформление ── (migrated from the old floating toolbar)
+        AppSectionCard {
+            SectionHeader(
+                icon = Icons.Default.Palette,
+                title = "Оформление",
+                subtitle = "Тема и цветовая палитра",
+                accent = AccentBlue,
+            )
+
+            ThemeModeRow(
+                icon = Icons.Default.BrightnessAuto,
+                title = "Системная",
+                selected = themeMode == "system",
+                onClick = { scope.launch { settingsStore.saveThemeMode("system") } },
+            )
+            ThemeModeRow(
+                icon = Icons.Default.Brightness5,
+                title = "Светлая",
+                selected = themeMode == "light",
+                onClick = { scope.launch { settingsStore.saveThemeMode("light") } },
+            )
+            ThemeModeRow(
+                icon = Icons.Default.Brightness2,
+                title = "Тёмная",
+                selected = themeMode == "dark",
+                onClick = { scope.launch { settingsStore.saveThemeMode("dark") } },
+            )
+
+            SoftDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Палитра",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                PaletteDot("aurora", Color(0xFF0EA5B7), themePalette) {
+                    scope.launch { settingsStore.saveThemePalette("aurora") }
+                }
+                PaletteDot("sunset", Color(0xFFB5413B), themePalette) {
+                    scope.launch { settingsStore.saveThemePalette("sunset") }
+                }
+                PaletteDot("graphite", Color(0xFF5C5F62), themePalette) {
+                    scope.launch { settingsStore.saveThemePalette("graphite") }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
         // ── Group: Обновления ── (in-app GitHub release updater)
         AppSectionCard {
             UpdateSection()
@@ -547,6 +574,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 icon = Icons.Default.Code,
                 title = "О приложении",
                 subtitle = "Исходный код и версия",
+                accent = AccentGray,
             )
             AboutRow(
                 icon = Icons.Default.Code,
@@ -567,6 +595,75 @@ fun SettingsTab(settingsStore: SettingsStore) {
 
         Spacer(modifier = Modifier.height(14.dp))
     }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ThemeModeRow — Telegram-style radio row (title + trailing check)
+// ════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun ThemeModeRow(
+    icon: ImageVector,
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (selected) AccentBlue else scheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = scheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        if (selected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = AccentBlue,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PaletteDot — small palette color circle for the "Оформление" section
+// ════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun PaletteDot(
+    paletteId: String,
+    color: Color,
+    selectedId: String,
+    onClick: () -> Unit,
+) {
+    val isSelected = paletteId == selectedId ||
+        // legacy ids collapse onto aurora (see getAppColorScheme remapping)
+        (paletteId == "aurora" && selectedId in listOf("cyber", "indigo", "forest", "espresso"))
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(color)
+            .then(
+                if (isSelected) Modifier.border(2.dp, AccentBlue, CircleShape) else Modifier,
+            )
+            .clickable(onClick = onClick),
+    )
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -646,11 +743,12 @@ private fun PoolChip(
     onClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.background.luminance() < 0.22f
     val container by animateColorAsState(
         targetValue = when {
             !enabled -> scheme.surfaceVariant.copy(alpha = 0.3f)
-            selected -> scheme.primary.copy(alpha = 0.85f)
-            else -> scheme.surface.copy(alpha = 0.50f)
+            selected -> scheme.primary
+            else -> if (isDark) scheme.surfaceContainerHigh else Color.White
         },
         animationSpec = tween(200),
         label = "pool_container",
@@ -665,8 +763,8 @@ private fun PoolChip(
         label = "pool_content",
     )
     val border by animateColorAsState(
-        targetValue = if (selected && enabled) Color.White.copy(alpha = 0.45f)
-                      else Color.White.copy(alpha = 0.20f),
+        targetValue = if (selected) Color.Transparent
+                      else scheme.outlineVariant.copy(alpha = 0.5f),
         animationSpec = tween(200),
         label = "pool_border",
     )
@@ -722,7 +820,7 @@ private fun IpSetupDialog(
     ) {
         Surface(
             shape = AppShapes.XLarge,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = AppElevation.Level3,
             modifier = Modifier
                 .fillMaxWidth(0.95f)
@@ -815,3 +913,6 @@ private fun IpSetupDialog(
         }
     }
 }
+
+private fun Color.luminance(): Float =
+    0.299f * red + 0.587f * green + 0.114f * blue

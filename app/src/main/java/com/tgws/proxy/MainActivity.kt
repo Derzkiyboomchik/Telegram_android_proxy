@@ -17,19 +17,20 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.pointer.pointerInput
 
@@ -37,13 +38,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.outlined.PowerSettingsNew as PowerSettingsNewOutlined
+import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
+import androidx.compose.material.icons.outlined.Terminal as TerminalOutlined
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
@@ -53,9 +56,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tgws.proxy.ui.ConnectionTab
-import com.tgws.proxy.ui.FloatingToolbar
 import com.tgws.proxy.ui.LogsTab
 import com.tgws.proxy.ui.SettingsTab
 import com.tgws.proxy.ui.TgWsProxyTheme
@@ -93,22 +96,19 @@ class MainActivity : ComponentActivity() {
             val settingsStore = remember { SettingsStore(context) }
             val themeMode by settingsStore.themeMode
                 .collectAsStateWithLifecycle(initialValue = "system")
-            val isDynamicColor by settingsStore.isDynamicColor
-                .collectAsStateWithLifecycle(initialValue = true)
             val themePalette by settingsStore.themePalette
-                .collectAsStateWithLifecycle(initialValue = "indigo")
-            val scope = rememberCoroutineScope()
+                .collectAsStateWithLifecycle(initialValue = "aurora")
 
             LaunchedEffect(settingsStore) {
                 settingsStore.migrateLegacyDefaults()
             }
 
-            TgWsProxyTheme(themeMode = themeMode, dynamicColor = isDynamicColor, themePalette = themePalette) {
+            TgWsProxyTheme(themeMode = themeMode, dynamicColor = false, themePalette = themePalette) {
                 // Animated color transition when theme/palette changes — wraps the
                 // entire app in a Crossfade so switching from e.g. cyber to indigo
                 // is a smooth dissolve rather than a hard jump.
                 Crossfade(
-                    targetState = Triple(themeMode, isDynamicColor, themePalette),
+                    targetState = Pair(themeMode, themePalette),
                     animationSpec = tween(durationMillis = 360, easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1f)),
                     label = "theme_crossfade",
                 )
@@ -126,24 +126,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxSize(),
                                 color = Color.Transparent,
                             ) {
-                                Box {
-                                    MainContent(settingsStore)
-
-                                    FloatingToolbar(
-                                        currentTheme = themeMode,
-                                        onThemeChange = { mode ->
-                                            scope.launch { settingsStore.saveThemeMode(mode) }
-                                        },
-                                        isDynamicColor = isDynamicColor,
-                                        onDynamicColorChange = { dc ->
-                                            scope.launch { settingsStore.saveDynamicColor(dc) }
-                                        },
-                                        currentPalette = themePalette,
-                                        onPaletteChange = { pal ->
-                                            scope.launch { settingsStore.saveThemePalette(pal) }
-                                        },
-                                    )
-                                }
+                                MainContent(settingsStore)
                             }
                         }
                     }
@@ -170,7 +153,8 @@ class MainActivity : ComponentActivity() {
 
 private data class NavItem(
     val label: String,
-    val iconRes: androidx.compose.ui.graphics.vector.ImageVector
+    val outlinedIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    val filledIcon: androidx.compose.ui.graphics.vector.ImageVector,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -182,9 +166,9 @@ fun MainContent(settingsStore: SettingsStore) {
     val density = LocalDensity.current
     val navItems = remember {
         listOf(
-            NavItem("Прокси", Icons.Default.PowerSettingsNew),
-            NavItem("Настройки", Icons.Default.Settings),
-            NavItem("Логи", Icons.Default.Terminal)
+            NavItem("Прокси", Icons.Outlined.PowerSettingsNewOutlined, Icons.Default.PowerSettingsNew),
+            NavItem("Настройки", Icons.Outlined.SettingsOutlined, Icons.Default.Settings),
+            NavItem("Логи", Icons.Outlined.TerminalOutlined, Icons.Default.Terminal)
         )
     }
     val safeBottomInset = with(density) { WindowInsets.safeDrawing.getBottom(density).toDp() }
@@ -298,26 +282,14 @@ private fun ProxyNavigationBar(
 ) {
     val colors = MaterialTheme.colorScheme
     val isDark = remember(colors.background) { colors.background.luminance() < 0.22f }
-    val selectedColor = colors.primary
-    val unselectedColor = colors.onSurfaceVariant.copy(alpha = 0.55f)
 
-    // Liquid glass shell — translucent with a thin white-tinted border
-    val shellColor = remember(isDark, colors.surface) {
-        colors.surface.copy(alpha = if (isDark) 0.65f else 0.82f)
-    }
-    val shellBorder = remember(isDark) {
-        if (isDark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.20f)
-        else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.45f)
-    }
-    // Selected indicator — tinted glass
-    val indicatorColor = remember(isDark, colors.primary, colors.primaryContainer) {
-        if (isDark) colors.primary.copy(alpha = 0.30f)
-        else colors.primary.copy(alpha = 0.18f)
-    }
-    val indicatorBorder = remember(isDark) {
-        if (isDark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f)
-        else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.50f)
-    }
+    // Telegram-style palette — fixed brand blue regardless of app palette
+    val selectedColor = Color(0xFF37A2DE)
+    val unselectedColor = if (isDark) Color(0xFF8A8A8E) else Color(0xFF8E8E93)
+    val indicatorColor = selectedColor.copy(alpha = if (isDark) 0.22f else 0.12f)
+    val shellColor = if (isDark) colors.surface.copy(alpha = 0.92f)
+                     else Color.White.copy(alpha = 0.96f)
+
     val indicatorIndex = remember { Animatable(selectedTab.toFloat()) }
     val dragVisualIndex = indicatorIndex.value
 
@@ -344,32 +316,31 @@ private fun ProxyNavigationBar(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-            .padding(horizontal = 22.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        val trackPadding = 8.dp
+        val trackPadding = 6.dp
         val itemWidth = (this.maxWidth - trackPadding * 2) / navItems.size
         val indicatorOffset = trackPadding + itemWidth * dragVisualIndex
 
         Surface(
-            shape = RoundedCornerShape(32.dp),
+            shape = RoundedCornerShape(28.dp),
             color = shellColor,
-            border = BorderStroke(0.5.dp, shellBorder),
             tonalElevation = 0.dp,
-            shadowElevation = if (isDark) 12.dp else 8.dp,
+            shadowElevation = if (isDark) 10.dp else 6.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .height(64.dp)
             ) {
+                // Sliding selection pill — glides between tabs, no border
                 Surface(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = indicatorColor,
-                    border = BorderStroke(0.5.dp, indicatorBorder),
                     modifier = Modifier
                         .offset(x = indicatorOffset)
-                        .padding(vertical = 6.dp)
+                        .padding(vertical = 4.dp)
                         .width(itemWidth)
                         .fillMaxHeight()
                 ) {}
@@ -377,31 +348,54 @@ private fun ProxyNavigationBar(
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = trackPadding, vertical = 6.dp)
+                        .padding(horizontal = trackPadding, vertical = 4.dp)
                 ) {
                     navItems.forEachIndexed { index, item ->
                         val emphasis = (1f - abs(index - dragVisualIndex)).coerceIn(0f, 1f)
                         val iconColor = lerp(unselectedColor, selectedColor, emphasis)
+                        // Swap outlined → filled once the tab is (visually) selected.
+                        // During drags emphasis is continuous, so the swap happens
+                        // halfway through the slide — same as selection commit.
+                        val filled = emphasis >= 0.5f
 
                         Column(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
-                                .clip(RoundedCornerShape(22.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .clickable { onTabSelected(index) },
                             verticalArrangement = Arrangement.Center,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(
-                                imageVector = item.iconRes,
-                                contentDescription = item.label,
-                                modifier = Modifier.size(22.dp),
-                                tint = iconColor
-                            )
-                            Spacer(Modifier.height(4.dp))
+                            AnimatedContent(
+                                targetState = filled,
+                                transitionSpec = {
+                                    (fadeIn(tween(150)) + scaleIn(
+                                        initialScale = 0.7f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessMediumLow,
+                                        ),
+                                    )) togetherWith
+                                        (fadeOut(tween(150)) + scaleOut(
+                                            targetScale = 0.7f,
+                                            animationSpec = tween(150),
+                                        ))
+                                },
+                                label = "nav_icon_$index",
+                            ) { isFilled ->
+                                Icon(
+                                    imageVector = if (isFilled) item.filledIcon else item.outlinedIcon,
+                                    contentDescription = item.label,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = iconColor
+                                )
+                            }
+                            Spacer(Modifier.height(2.dp))
                             Text(
                                 text = item.label,
                                 style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
                                 fontWeight = if (emphasis > 0.55f) FontWeight.SemiBold else FontWeight.Medium,
                                 color = iconColor,
                                 maxLines = 1
@@ -418,90 +412,9 @@ private fun ProxyNavigationBar(
 private fun AppBackdrop(modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val isDark = remember(colors.background) { colors.background.luminance() < 0.22f }
-    val baseBrush = remember(colors.background, colors.surface, colors.surfaceVariant, isDark) {
-        Brush.verticalGradient(
-            colors = if (isDark) {
-                listOf(
-                    lerp(colors.background, colors.surface, 0.42f),
-                    colors.background,
-                    lerp(colors.surfaceVariant, colors.background, 0.35f)
-                )
-            } else {
-                listOf(
-                    lerp(colors.background, colors.surface, 0.78f),
-                    colors.background,
-                    lerp(colors.surfaceVariant, colors.background, 0.30f)
-                )
-            }
-        )
-    }
-    val topGlow = remember(colors.primary, isDark) {
-        colors.primary.copy(alpha = if (isDark) 0.16f else 0.09f)
-    }
-    val leftGlow = remember(colors.tertiary, colors.secondaryContainer, isDark) {
-        if (isDark) {
-            colors.tertiary.copy(alpha = 0.11f)
-        } else {
-            lerp(colors.tertiary, colors.secondaryContainer, 0.74f).copy(alpha = 0.24f)
-        }
-    }
-    val bottomGlow = remember(colors.secondary, colors.primaryContainer, isDark) {
-        if (isDark) {
-            colors.primary.copy(alpha = 0.10f)
-        } else {
-            lerp(colors.secondary, colors.primaryContainer, 0.70f).copy(alpha = 0.22f)
-        }
-    }
-    val lightOrbOutline = remember(colors.outlineVariant) {
-        colors.outlineVariant.copy(alpha = 0.26f)
-    }
-    val topOrbGlow = remember(topGlow, colors.primary, colors.primaryContainer, isDark) {
-        if (isDark) {
-            topGlow
-        } else {
-            lerp(colors.primary, colors.primaryContainer, 0.72f).copy(alpha = 0.32f)
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(baseBrush)
-    ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(x = (-86).dp, y = (-126).dp)
-                .size(258.dp)
-                .clip(CircleShape)
-                .background(topOrbGlow)
-                .then(
-                    if (isDark) Modifier else Modifier.border(1.dp, lightOrbOutline, CircleShape)
-                )
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .offset(x = (-44).dp, y = 28.dp)
-                .size(146.dp)
-                .clip(CircleShape)
-                .background(leftGlow)
-                .then(
-                    if (isDark) Modifier else Modifier.border(1.dp, lightOrbOutline.copy(alpha = 0.22f), CircleShape)
-                )
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = 62.dp, y = (-208).dp)
-                .size(198.dp)
-                .clip(CircleShape)
-                .background(bottomGlow)
-                .then(
-                    if (isDark) Modifier else Modifier.border(1.dp, lightOrbOutline.copy(alpha = 0.20f), CircleShape)
-                )
-        )
-    }
+    // Flat Telegram-style backdrop — grouped-list gray in light, near-black in dark
+    val backdropColor = if (isDark) Color(0xFF0E0E10) else Color(0xFFEFEFF4)
+    Box(modifier = modifier.fillMaxSize().background(backdropColor))
 }
 
 /**

@@ -1,6 +1,10 @@
 package com.tgws.proxy.ui
 
 import android.content.Context
+import android.graphics.ImageDecoder
+import android.graphics.drawable.AnimatedImageDrawable
+import android.os.Build
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -24,6 +28,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +44,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Link
@@ -47,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +66,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
@@ -68,6 +75,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tgws.proxy.ProxyController
 import com.tgws.proxy.ProxyService
@@ -144,15 +153,20 @@ fun ConnectionTab(settingsStore: SettingsStore) {
 
     val isActiveVisual = isRunning || isProcessing
 
+    var showClientPicker by remember { mutableStateOf(false) }
+
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
-            .padding(top = 4.dp, bottom = 16.dp),
+            .verticalScroll(scrollState)
+            .padding(horizontal = 20.dp)
+            .padding(top = 4.dp, bottom = 24.dp),
     ) {
         // ── Page header ─────────────────────────────────────────────────────
         Row(
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -162,55 +176,111 @@ fun ConnectionTab(settingsStore: SettingsStore) {
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // ── Hero ────────────────────────────────────────────────────────────
-        Box(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            contentAlignment = Alignment.Center,
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ChatBackground(isActive = isActiveVisual, modifier = Modifier.fillMaxSize())
+            GlassToggle(
+                isActive = isActiveVisual,
+                isProcessing = isProcessing,
+                onToggle = onToggle,
+            )
 
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+            Spacer(modifier = Modifier.height(20.dp))
+
+            StatusLabel(
+                statusText = statusText,
+                isActive = isActiveVisual,
+                isProcessing = isProcessing,
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Unified Telegram action row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                GlassToggle(
-                    isActive = isActiveVisual,
-                    isProcessing = isProcessing,
-                    onToggle = onToggle,
-                )
+                val scheme = MaterialTheme.colorScheme
+                val tokens = AppTheme.glass
 
-                Spacer(modifier = Modifier.height(36.dp))
-
-                StatusLabel(
-                    statusText = statusText,
-                    isActive = isActiveVisual,
-                    isProcessing = isProcessing,
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Launch pills
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                // Primary Button: Connect to Telegram
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (isRunning) tokens.telegramBlue else scheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(64.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable(enabled = isRunning) {
+                            val installed = TelegramLauncher.getInstalledClients(context)
+                            if (installed.size == 1) {
+                                TelegramLauncher.launch(context, proxyUrl, installed.first().packageName)
+                            } else {
+                                showClientPicker = true
+                            }
+                        }
                 ) {
-                    LaunchPill(
-                        label = "Telegram",
-                        enabled = isRunning,
-                        modifier = Modifier.weight(1f),
-                        onClick = { openTelegram(context, proxyUrl, "org.telegram.messenger") },
-                    )
-                    LaunchPill(
-                        label = "Beta",
-                        enabled = isRunning,
-                        modifier = Modifier.weight(1f),
-                        onClick = { openTelegram(context, proxyUrl, "org.telegram.messenger.beta") },
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_telegram_logo),
+                            contentDescription = null,
+                            tint = if (isRunning) Color.White else scheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Подключить к Telegram",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (isRunning) Color.White else scheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // Quick copy button
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = scheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable {
+                            TelegramLauncher.copyToClipboard(context, proxyUrl)
+                            Toast.makeText(context, "Ссылка скопирована", Toast.LENGTH_SHORT).show()
+                        }
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Скопировать",
+                            tint = scheme.onSurface,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
+        }
+
+        if (showClientPicker) {
+            TelegramPickerBottomSheet(
+                proxyUrl = proxyUrl,
+                onDismiss = { showClientPicker = false }
+            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -233,7 +303,10 @@ fun ConnectionTab(settingsStore: SettingsStore) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// GlassToggle — 200dp circular Liquid Glass button with Telegram logo
+// GlassToggle — 200dp circular start button with Telegram logo.
+// Behind it sits a pre-rendered WebP loop (hardware-decoded, zero
+// recomposition): sonar rings while connecting, breathing glow while
+// connected, nothing when idle.
 // ════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun GlassToggle(
@@ -243,6 +316,7 @@ private fun GlassToggle(
 ) {
     val scheme = MaterialTheme.colorScheme
     val tokens = AppTheme.glass
+    val isDark = scheme.background.luminance() < 0.22f
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -250,19 +324,6 @@ private fun GlassToggle(
         targetValue = if (isPressed) 0.94f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 600f),
         label = "press",
-    )
-
-    // Connecting pulse rings
-    val pulse = rememberInfiniteTransition(label = "pulse")
-    val ringScale1 by pulse.animateFloat(
-        initialValue = 0.85f, targetValue = 1.35f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Restart),
-        label = "ring1",
-    )
-    val ringAlpha1 by pulse.animateFloat(
-        initialValue = 0.5f, targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Restart),
-        label = "ring1a",
     )
 
     // Logo tint
@@ -279,81 +340,42 @@ private fun GlassToggle(
 
     Box(
         modifier = Modifier
-            .size(240.dp)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = !isProcessing,
-                onClick = onToggle,
-            ),
+            .size(340.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // Outer ambient glow — only when active (drawn first, sits at the
-        // bottom of the z-stack; doesn't intercept clicks because the
-        // clickable() lives on the outer Box, not on this child).
-        if (isActive) {
-            Box(
-                modifier = Modifier
-                    .size(240.dp)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                tokens.telegramBlue.copy(alpha = 0.35f),
-                                tokens.telegramBlue.copy(alpha = 0.10f),
-                                Color.Transparent,
-                            ),
-                        ),
-                        shape = CircleShape,
-                    ),
-            )
-        }
-
-        // Pulse rings during connecting
-        if (isProcessing) {
-            Box(
-                modifier = Modifier
-                    .size(200.dp)
-                    .graphicsLayer {
-                        scaleX = ringScale1
-                        scaleY = ringScale1
-                        alpha = ringAlpha1
-                    }
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                tokens.connecting.copy(alpha = 0.40f),
-                                Color.Transparent,
-                            ),
-                        ),
-                    ),
-            )
-        }
+        // Pre-rendered orbit scene — sits at the bottom of the z-stack;
+        // doesn't intercept clicks because clickable() lives on the inner button.
+        // Frozen on the first frame while the proxy is off, loops once
+        // the proxy is connecting/connected.
+        ProxyStateAnimation(
+            resId = R.raw.proxy_orbit,
+            playing = isProcessing || isActive,
+            modifier = Modifier.size(340.dp),
+        )
 
         // Drop shadow — decorative only, doesn't intercept clicks.
         Box(
             modifier = Modifier
                 .size(200.dp)
                 .shadow(
-                    elevation = if (isActive) 32.dp else 16.dp,
+                    elevation = if (isActive) 24.dp else 8.dp,
                     shape = CircleShape,
-                    ambientColor = if (isActive) tokens.telegramBlue.copy(alpha = 0.40f) else Color.Black.copy(alpha = 0.15f),
-                    spotColor = if (isActive) tokens.telegramBlue.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.20f),
+                    ambientColor = if (isActive) tokens.telegramBlue.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.12f),
+                    spotColor = if (isActive) tokens.telegramBlue.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.16f),
                 ),
         )
 
-        // Glass body — translucent with a soft tint when active. The border
-        // is drawn directly here (BorderStroke on Surface was intercepting
-        // taps — see commit message for details).
+        // Button body — flat surface when idle, solid Telegram blue when active
         val bodyColor by animateColorAsState(
-            targetValue = if (isActive) tokens.telegramBlue.copy(alpha = 0.88f)
-                          else scheme.surface.copy(alpha = 0.70f),
+            targetValue = if (isActive) tokens.telegramBlue
+                          else if (isDark) scheme.surfaceContainerHigh
+                          else Color.White,
             animationSpec = tween(500, easing = FastOutSlowInEasing),
             label = "body",
         )
         val rimColor by animateColorAsState(
-            targetValue = if (isActive) Color.White.copy(alpha = 0.65f)
-                          else tokens.borderLight.copy(alpha = tokens.borderAlpha),
+            targetValue = if (isActive) Color.Transparent
+                          else scheme.outlineVariant.copy(alpha = 0.6f),
             animationSpec = tween(500, easing = FastOutSlowInEasing),
             label = "rim",
         )
@@ -364,14 +386,11 @@ private fun GlassToggle(
                 .clip(CircleShape)
                 .border(1.dp, rimColor, CircleShape)
                 .background(bodyColor)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.30f),
-                            Color.Transparent,
-                        ),
-                        center = androidx.compose.ui.geometry.Offset(0.4f, 0.3f),
-                    ),
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    enabled = !isProcessing,
+                    onClick = onToggle,
                 )
                 .graphicsLayer {
                     scaleX = pressScale
@@ -391,6 +410,55 @@ private fun GlassToggle(
                     },
                 colorFilter = ColorFilter.tint(tintColor, BlendMode.SrcIn),
             )
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ProxyStateAnimation — shows the animated WebP through ImageDecoder +
+// AnimatedImageDrawable inside a plain ImageView. Hardware-decoded, so the
+// Compose tree never recomposes per frame. While `playing` is false the
+// drawable is never started, leaving the first frame frozen on screen.
+// On API 26–27 (no ImageDecoder) falls back to the static first frame via
+// setImageResource().
+// ════════════════════════════════════════════════════════════════════════════
+@Composable
+private fun ProxyStateAnimation(
+    resId: Int,
+    playing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val supportsAnimated = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+    val drawable = remember(resId) {
+        if (supportsAnimated) {
+            ImageDecoder.decodeDrawable(ImageDecoder.createSource(context.resources, resId))
+        } else {
+            null
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            ImageView(ctx).apply {
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+            }
+        },
+        update = { imageView ->
+            if (drawable != null) {
+                imageView.setImageDrawable(drawable)
+                val anim = drawable as? AnimatedImageDrawable
+                if (playing) anim?.start() else anim?.stop()
+            } else {
+                imageView.setImageResource(resId)
+            }
+        },
+        modifier = modifier,
+    )
+
+    DisposableEffect(drawable) {
+        onDispose {
+            (drawable as? AnimatedImageDrawable)?.stop()
         }
     }
 }
@@ -453,77 +521,6 @@ private fun StatusLabel(
     }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// LaunchPill — Telegram / Beta
-// ════════════════════════════════════════════════════════════════════════════
-@Composable
-private fun LaunchPill(
-    label: String,
-    enabled: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val tokens = AppTheme.glass
-
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 600f),
-        label = "scale",
-    )
-
-    val containerColor = if (enabled) {
-        if (scheme.background.luminance() < 0.22f) {
-            tokens.telegramBlue.copy(alpha = 0.22f)
-        } else {
-            tokens.telegramBlue.copy(alpha = 0.14f)
-        }
-    } else {
-        scheme.surface.copy(alpha = 0.40f)
-    }
-    val contentColor = if (enabled) scheme.onSurface else scheme.onSurface.copy(alpha = 0.40f)
-    val borderColor = if (enabled) Color.White.copy(alpha = 0.30f) else scheme.outlineVariant.copy(alpha = 0.30f)
-
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .height(52.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            },
-        shape = AppShapes.Pill,
-        color = containerColor,
-        contentColor = contentColor,
-        border = BorderStroke(0.5.dp, borderColor),
-        interactionSource = interactionSource,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_telegram_logo),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                colorFilter = ColorFilter.tint(
-                    if (enabled) tokens.telegramBlue else scheme.onSurface.copy(alpha = 0.4f),
-                    BlendMode.SrcIn,
-                ),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // InfoChipsRow — CF / Pool / Port as soft pills
@@ -573,9 +570,9 @@ private fun InfoChip(
     val isDark = scheme.background.luminance() < 0.22f
     Surface(
         modifier = modifier.height(48.dp),
-        shape = AppShapes.Pill,
-        color = scheme.surface.copy(alpha = if (isDark) 0.35f else 0.55f),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.20f else 0.35f)),
+        shape = RoundedCornerShape(14.dp),
+        color = if (isDark) scheme.surfaceContainerHigh else Color.White,
+        border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.5f)),
     ) {
         Row(
             modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
@@ -601,7 +598,7 @@ private fun InfoChip(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ProxyLinkCard — tappable glass card with the proxy URL
+// ProxyLinkCard — tappable card with the proxy URL
 // ════════════════════════════════════════════════════════════════════════════
 @Composable
 private fun ProxyLinkCard(
@@ -633,9 +630,9 @@ private fun ProxyLinkCard(
                 scaleX = scale
                 scaleY = scale
             },
-        shape = AppShapes.Large,
-        color = scheme.surface.copy(alpha = if (isDark) 0.45f else 0.65f),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.22f else 0.40f)),
+        shape = RoundedCornerShape(14.dp),
+        color = if (isDark) scheme.surfaceContainerHigh else Color.White,
+        border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.5f)),
         interactionSource = interactionSource,
     ) {
         Row(
@@ -679,9 +676,9 @@ private fun SessionCard(isActive: Boolean) {
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = AppShapes.Large,
-        color = scheme.surface.copy(alpha = if (isDark) 0.35f else 0.55f),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.18f else 0.30f)),
+        shape = RoundedCornerShape(14.dp),
+        color = if (isDark) scheme.surfaceContainerHigh else Color.White,
+        border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.5f)),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
@@ -713,19 +710,6 @@ private fun Stat(label: String, value: String, accent: Color) {
             fontWeight = FontWeight.Bold,
             maxLines = 1,
         )
-    }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// Helpers
-// ════════════════════════════════════════════════════════════════════════════
-private fun openTelegram(context: Context, proxyUrl: String, packageName: String) {
-    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(proxyUrl))
-    intent.setPackage(packageName)
-    try {
-        context.startActivity(intent)
-    } catch (_: Exception) {
-        Toast.makeText(context, "Приложение не установлено", Toast.LENGTH_SHORT).show()
     }
 }
 

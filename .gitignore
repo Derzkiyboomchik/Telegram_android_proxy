@@ -36,3 +36,4 @@ app/build/
 
 # Source icon asset
 иконка.png
+.tmp/

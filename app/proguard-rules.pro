@@ -28,6 +28,8 @@
 -keep class com.tgws.proxy.NativeProxy { *; }
 -keepclassmembers class com.tgws.proxy.NativeProxy { *; }
 
+
+
 # Keep all native methods across the project
 -keepclasseswithmembernames class * {
     native <methods>;

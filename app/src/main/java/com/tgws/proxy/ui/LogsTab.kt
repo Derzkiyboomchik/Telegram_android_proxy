@@ -112,12 +112,12 @@ fun LogsTab(settingsStore: SettingsStore) {
             .fillMaxSize()
             .padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 16.dp),
     ) {
-        // Sticky header — glass panel
+        // Sticky header — white Telegram-style card
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = AppShapes.Large,
-            color = scheme.surface.copy(alpha = if (isDark) 0.45f else 0.65f),
-            border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.20f else 0.40f)),
+            shape = RoundedCornerShape(14.dp),
+            color = if (isDark) scheme.surfaceContainerHigh else Color.White,
+            border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.5f)),
         ) {
             Row(
                 modifier = Modifier
@@ -196,12 +196,12 @@ fun LogsTab(settingsStore: SettingsStore) {
             }
         }
 
-        // Logs container — translucent glass
+        // Logs container — white Telegram-style card
         Surface(
             modifier = Modifier.fillMaxSize(),
-            shape = AppShapes.XLarge,
-            color = scheme.surface.copy(alpha = if (isDark) 0.40f else 0.60f),
-            border = BorderStroke(0.5.dp, Color.White.copy(alpha = if (isDark) 0.18f else 0.35f)),
+            shape = RoundedCornerShape(14.dp),
+            color = if (isDark) scheme.surfaceContainerHigh else Color.White,
+            border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.5f)),
         ) {
             if (filteredLogs.isEmpty()) {
                 EmptyLogState()
@@ -246,18 +246,18 @@ private fun LogFilterChip(
         modifier = modifier.height(40.dp),
         shape = RoundedCornerShape(50),
         colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            containerColor = MaterialTheme.colorScheme.surface,
             labelColor = MaterialTheme.colorScheme.onSurface,
-            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+            selectedContainerColor = Color(0xFF37A2DE).copy(alpha = 0.15f),
+            selectedLabelColor = Color(0xFF37A2DE),
             disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
             disabledLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
         ),
         border = FilterChipDefaults.filterChipBorder(
             enabled = enabled,
             selected = selected,
-            borderColor = Color.White.copy(alpha = 0.25f),
-            selectedBorderColor = Color.White.copy(alpha = 0.45f),
+            borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            selectedBorderColor = Color(0xFF37A2DE).copy(alpha = 0.4f),
             borderWidth = 0.5.dp,
             selectedBorderWidth = 0.5.dp,
         ),
