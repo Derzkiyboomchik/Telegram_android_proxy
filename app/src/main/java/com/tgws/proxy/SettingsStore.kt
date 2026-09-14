@@ -44,7 +44,6 @@ class SettingsStore(private val context: Context) {
         val LOG_SHOW_ERROR = booleanPreferencesKey("log_show_error")
         val LOG_SHOW_NULL = booleanPreferencesKey("log_show_null")
         val IS_EXPERIMENTAL_MODE = booleanPreferencesKey("is_experimental_mode")
-        val POWER_SAVER_ENABLED = booleanPreferencesKey("power_saver_enabled")
         val WEBVIEW_MODE_ENABLED = booleanPreferencesKey("webview_mode_enabled")
         val DIRECT_DC_DEFAULTS_MIGRATED = booleanPreferencesKey("direct_dc_defaults_migrated")
         val DIRECT_DC_DEFAULTS_V2_MIGRATED = booleanPreferencesKey("direct_dc_defaults_v2_migrated")
@@ -75,7 +74,6 @@ class SettingsStore(private val context: Context) {
     val customCfDomain: Flow<String> = context.dataStore.data.map { it[Keys.CUSTOM_CF_DOMAIN] ?: "" }
     val autoStartOnBoot: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUTO_START_ON_BOOT] ?: false }
     val secretKey: Flow<String> = context.dataStore.data.map { it[Keys.SECRET_KEY] ?: "" }
-    val powerSaverEnabled: Flow<Boolean> = context.dataStore.data.map { true }
 
     val logShowDebug: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOG_SHOW_DEBUG] ?: false }
     val logShowInfo: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOG_SHOW_INFO] ?: DEFAULT_LOG_SHOW_INFO }
@@ -152,7 +150,6 @@ class SettingsStore(private val context: Context) {
             it[Keys.CUSTOM_CF_DOMAIN_ENABLED] = customCfDomainEnabled
             it[Keys.CUSTOM_CF_DOMAIN] = customCfDomain
             it[Keys.SECRET_KEY] = secretKey
-            it[Keys.POWER_SAVER_ENABLED] = true
         }
     }
 }

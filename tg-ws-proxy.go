@@ -96,8 +96,26 @@ var (
 	poolSize        atomic.Int32
 	isNetworkOnline atomic.Bool
 	isPowerSaveMode atomic.Bool
-	logVerbose      = false
+	// EMA of successful WS dial+handshake duration (ms); drives adaptive
+	// timeouts on high-latency mobile links (e.g. ~1500ms RTT on cellular).
+	handshakeEmaMs atomic.Int64
+	logVerbose     = false
 )
+
+// recordHandshakeDuration updates the handshake latency EMA with a fresh sample.
+func recordHandshakeDuration(start time.Time) {
+	elapsed := float64(time.Since(start).Milliseconds())
+	if elapsed <= 0 {
+		return
+	}
+	for {
+		cur := handshakeEmaMs.Load()
+		next := int64(0.7*float64(cur) + 0.3*elapsed)
+		if handshakeEmaMs.CompareAndSwap(cur, next) {
+			return
+		}
+	}
+}
 
 type cfproxy429State struct {
 	until   time.Time
@@ -108,6 +126,7 @@ func init() {
 	poolSize.Store(defaultPoolSz)
 	isNetworkOnline.Store(true)
 	isPowerSaveMode.Store(true)
+	handshakeEmaMs.Store(500)
 }
 
 // Cloudflare proxy config
@@ -161,13 +180,70 @@ var (
 )
 
 func connectOneWS(ctx context.Context, ip string, domains []string) *RawWebSocket {
+	ws, _ := raceWSConnect(ctx, ip, domains, dialTimeout())
+	return ws
+}
+
+// raceWSConnect dials all candidate domains in parallel and returns the first
+// successful connection. On lossy high-RTT mobile links sequential retries
+// would multiply worst-case latency by the number of candidates; racing turns
+// it into a single handshake round. On success the error list is nil (losers
+// may still be in flight); on total failure one error per candidate is returned.
+func raceWSConnect(ctx context.Context, ip string, domains []string, timeout float64) (*RawWebSocket, []error) {
+	if len(domains) == 0 {
+		return nil, nil
+	}
+
+	errs := make([]error, len(domains))
+	type raceResult struct {
+		ws *RawWebSocket
+	}
+	ch := make(chan raceResult, len(domains))
+	attemptCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	for _, d := range domains {
-		ws, err := wsConnect(ctx, ip, d, "/apiws", dialTimeout())
-		if err == nil {
-			return ws
+		go func(dom string) {
+			ws, err := wsConnect(attemptCtx, ip, dom, "/apiws", timeout)
+			if err != nil {
+				for i, known := range domains {
+					if known == dom {
+						errs[i] = err
+						break
+					}
+				}
+				ch <- raceResult{}
+				return
+			}
+			select {
+			case ch <- raceResult{ws: ws}:
+			case <-attemptCtx.Done():
+				ws.Close()
+			}
+		}(d)
+	}
+
+	remaining := len(domains)
+	for remaining > 0 {
+		select {
+		case r := <-ch:
+			remaining--
+			if r.ws != nil {
+				cancel()
+				go func(left int) {
+					for j := 0; j < left; j++ {
+						if lr := <-ch; lr.ws != nil {
+							lr.ws.Close()
+						}
+					}
+				}(remaining)
+				return r.ws, nil
+			}
+		case <-ctx.Done():
+			return nil, errs
 		}
 	}
-	return nil
+	return nil, errs
 }
 
 var dcDefaultIPs = map[int]string{
@@ -683,8 +759,9 @@ var (
 	wsBlackMu   sync.RWMutex
 	wsBlacklist = make(map[[2]int]bool)
 
-	dcFailMu    sync.RWMutex
-	dcFailUntil = make(map[[2]int]float64)
+	dcFailMu     sync.RWMutex
+	dcFailUntil  = make(map[[2]int]float64)
+	dcFailStrikes = make(map[[2]int]int)
 
 	zero64 = make([]byte, 64)
 )
@@ -1049,6 +1126,8 @@ func wsConnectOnce(ctx context.Context, dialAddr, domain, path string, timeout t
 		return nil, fmt.Errorf("empty dial address")
 	}
 
+	start := time.Now()
+
 	dialer := &net.Dialer{
 		Timeout: timeout,
 	}
@@ -1141,6 +1220,7 @@ func wsConnectOnce(ctx context.Context, dialAddr, domain, path string, timeout t
 	}
 
 	if statusCode == 101 {
+		recordHandshakeDuration(start)
 		return &RawWebSocket{conn: rawConn, bufReader: bufReader}, nil
 	}
 	headers := make(map[string]string)
@@ -1234,15 +1314,17 @@ func connectDirectWS(ctx context.Context, target string, domains []string, timeo
 		return nil, false, false
 	}
 
+	ws, errs := raceWSConnect(ctx, target, domains, timeout)
+	if ws != nil {
+		return ws, false, false
+	}
+
 	wsFailedRedirect := false
 	allRedirects := true
-
-	for _, dom := range domains {
-		ws, err := wsConnect(ctx, target, dom, "/apiws", timeout)
+	for _, err := range errs {
 		if err == nil {
-			return ws, wsFailedRedirect, false
+			continue
 		}
-
 		stats.wsErrors.Add(1)
 		var wsErr *WsHandshakeError
 		if errors.As(err, &wsErr) {
@@ -1899,7 +1981,7 @@ func (p *WsPool) Get(ctx context.Context, dc int, isMedia bool, targetIP string,
 		break
 	}
 
-	if isNetworkOnline.Load() && !isPowerSaveMode.Load() {
+	if isNetworkOnline.Load() {
 		if s.CompareAndSwap(0, 1) {
 			go p.refill(ctx, slot, q, s, targetIP, domains)
 		}
@@ -1913,8 +1995,11 @@ func (p *WsPool) refill(ctx context.Context, slot dcSlot, q chan *poolEntry, s *
 		return
 	}
 	sz := int(poolSize.Load())
-	if isPowerSaveMode.Load() {
-		sz = 0
+	if isPowerSaveMode.Load() && sz > 2 {
+		// Keep a small pool alive in power save mode: reusing warm connections
+		// saves both battery and the multi-RTT TLS+WS handshake on every
+		// background media request.
+		sz = 2
 	}
 	needed := sz - len(q)
 	if needed <= 0 {
@@ -2032,31 +2117,51 @@ func bridgeWS(ctx context.Context, conn net.Conn, ws *RawWebSocket,
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// WS keepalive: periodic ping to detect dead connections
+	// WS keepalive: periodic ping to detect dead connections. Interval backs
+	// off geometrically while idle (longer radio sleep = less battery) and a
+	// single lost ping no longer tears the connection down on lossy links.
 	var lastActivityUnix atomic.Int64
 	lastActivityUnix.Store(time.Now().Unix())
 	go func() {
-		pingInterval := 60 * time.Second
+		baseInterval := 60 * time.Second
+		maxInterval := 120 * time.Second
 		if isPowerSaveMode.Load() {
-			pingInterval = 90 * time.Second
+			baseInterval = 90 * time.Second
+			maxInterval = 6 * time.Minute
 		}
-		ticker := time.NewTicker(pingInterval)
-		defer ticker.Stop()
+		interval := baseInterval
+		var pingFailures int
+		timer := time.NewTimer(interval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx2.Done():
 				return
-			case <-ticker.C:
+			case <-timer.C:
 				if !isNetworkOnline.Load() {
+					timer.Reset(interval)
 					continue
 				}
 				idleSec := time.Now().Unix() - lastActivityUnix.Load()
 				if idleSec >= 45 {
 					if err := ws.SendPing(); err != nil {
-						cancel()
-						return
+						pingFailures++
+						if pingFailures >= 2 {
+							cancel()
+							return
+						}
+					} else {
+						pingFailures = 0
+						next := time.Duration(float64(interval) * 1.6)
+						if next > maxInterval {
+							next = maxInterval
+						}
+						interval = next
 					}
+				} else {
+					interval = baseInterval
 				}
+				timer.Reset(interval)
 			}
 		}
 	}()
@@ -2213,14 +2318,45 @@ func tcpFallback(ctx context.Context, client net.Conn, dst string, port int,
 	return true
 }
 
-func dialTimeout() float64 {
-	if !isNetworkOnline.Load() {
+// markDcFail registers a failed connection round for a DC and computes a
+// progressive, jittered cooldown. On a persistently bad link this stops the
+// hot retry loop (each Telegram reconnect attempt burning a full handshake)
+// instead of hammering the network every few seconds.
+func markDcFail(dcKey [2]int, now float64) {
+	dcFailMu.Lock()
+	defer dcFailMu.Unlock()
+	strikes := dcFailStrikes[dcKey] + 1
+	if strikes > 4 {
+		strikes = 4
+	}
+	dcFailStrikes[dcKey] = strikes
+	cooldown := dcFailCooldown * float64(int(1)<<(strikes-1))
+	if cooldown > 90 {
+		cooldown = 90
+	}
+	jitter := 0.8 + randv2.Float64()*0.4
+	dcFailUntil[dcKey] = now + cooldown*jitter
+}
+
+// clearDcFail resets the failure state after a successful connection.
+func clearDcFail(dcKey [2]int) {
+	dcFailMu.Lock()
+	delete(dcFailUntil, dcKey)
+	delete(dcFailStrikes, dcKey)
+	dcFailMu.Unlock()
+}
+
+func dialTimeout() float64 {	if !isNetworkOnline.Load() {
 		return 1.5
 	}
-	if isPowerSaveMode.Load() {
-		return 4.0
+	// Adaptive: high-RTT mobile links (TLS+WS handshake ≈ 4 RTT) need real
+	// headroom, while dead networks must still fail fast and cheap.
+	emaSec := float64(handshakeEmaMs.Load()) / 1000.0
+	t := math.Max(4.0, 2.2*emaSec)
+	if t > 8.0 {
+		t = 8.0
 	}
-	return 5.0
+	return t
 }
 
 func tryCfproxyBaseDomain(ctx context.Context, dc int, baseDomain string) (*RawWebSocket, string) {
@@ -2839,9 +2975,7 @@ func handleClient(ctx context.Context, conn net.Conn) {
 			wsBlackMu.Unlock()
 			logWarn.Printf(" DC%d%s заблокирован (302)", dc, mTag)
 		} else {
-			dcFailMu.Lock()
-			dcFailUntil[dcKey] = now + dcFailCooldown
-			dcFailMu.Unlock()
+			markDcFail(dcKey, now)
 		}
 
 		splitterFb, _ := newMsgSplitter(relayInit, proto)
@@ -2861,9 +2995,7 @@ func handleClient(ctx context.Context, conn net.Conn) {
 		logWarn.Printf(" direct relayInit write fail DC%d%s: %s", dc, mTag, compactConnError(err))
 		ws.Close()
 
-		dcFailMu.Lock()
-		dcFailUntil[dcKey] = now + dcFailCooldown
-		dcFailMu.Unlock()
+		markDcFail(dcKey, now)
 
 		logWarn.Printf(" direct retry fresh ws DC%d%s", dc, mTag)
 		retryWS, retryFailedRedirect, retryAllRedirects := connectDirectWS(ctx, target, domains, wsTimeout)
@@ -2891,9 +3023,7 @@ func handleClient(ctx context.Context, conn net.Conn) {
 		}
 	}
 
-	dcFailMu.Lock()
-	delete(dcFailUntil, dcKey)
-	dcFailMu.Unlock()
+	clearDcFail(dcKey)
 
 	stats.connectionsWs.Add(1)
 
@@ -3095,6 +3225,7 @@ func StopProxy() C.int {
 
 	dcFailMu.Lock()
 	dcFailUntil = make(map[[2]int]float64)
+	dcFailStrikes = make(map[[2]int]int)
 	dcFailMu.Unlock()
 
 	clearCfproxy429Cooldowns()

@@ -31,7 +31,6 @@ object ProxyController {
         val customCfDomainEnabled = settingsStore.customCfDomainEnabled.first()
         val customCfDomain = settingsStore.customCfDomain.first().trim()
         val secretKey = ensureSecretKey(settingsStore)
-        val powerSaverEnabled = settingsStore.powerSaverEnabled.first()
 
         val parsedIps = buildList {
             if (!isDcAuto) {
@@ -67,7 +66,6 @@ object ProxyController {
                     if (customCfDomainEnabled && cfEnabled) customCfDomain else ""
                 )
                 putExtra(ProxyService.EXTRA_SECRET_KEY, secretKey)
-                putExtra(ProxyService.EXTRA_POWER_SAVER, powerSaverEnabled)
             }
         )
         ProxyTileService.requestSync(context)

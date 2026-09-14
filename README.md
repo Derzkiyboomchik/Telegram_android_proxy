@@ -1,9 +1,18 @@
 # TG WS Proxy Android
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Derzkiyboomchik/Telegram_android_proxy?include_prereleases&color=blue)](https://github.com/Derzkiyboomchik/Telegram_android_proxy/releases)
+[![Release](https://img.shields.io/github/v/release/Derzkiyboomchik/Telegram_android_proxy?include_prereleases&color=blue)](https://github.com/Derzkiyboomchik/Telegram_android_proxy/releases/latest)
 
 Android-приложение для запуска локального TG WS Proxy прямо на смартфоне. Проксирует MTProto-трафик Telegram через WebSocket (`wss://kws*.web.telegram.org/apiws`), эффективно обходя DPI-фильтрацию. При недоступности прямого WebSocket автоматически переключается на Cloudflare CDN проксирование или TCP-fallback.
+
+## Скачать
+
+**[Перейти к последнему релизу](https://github.com/Derzkiyboomchik/Telegram_android_proxy/releases/latest)**
+
+| Файл | Описание |
+|---|---|
+| `TG-WS-Proxy-vX.Y.Z-release.apk` | Релизная сборка (рекомендуется) |
+| `TG-WS-Proxy-vX.Y.Z-debug.apk` | Отладочная сборка с подробными логами |
 
 Встроенный высокопроизводительный Go-движок с CGO обеспечивает нативную скорость и минимальное энергопотребление.
 

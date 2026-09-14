@@ -5,10 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -47,13 +45,6 @@ class ProxyService : Service() {
     private var lastCfPriority: Boolean = true
     private var lastCfDomain: String = ""
     private var lastSecretKey: String = ""
-    private var lastPowerSaver: Boolean = true
-
-    private val powerReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            updatePowerProfile()
-        }
-    }
 
     companion object {
         const val ACTION_START = "com.tgws.proxy.START"
@@ -66,7 +57,6 @@ class ProxyService : Service() {
         const val EXTRA_CFPROXY_PRIORITY = "EXTRA_CFPROXY_PRIORITY"
         const val EXTRA_CFPROXY_DOMAIN = "EXTRA_CFPROXY_DOMAIN"
         const val EXTRA_SECRET_KEY = "EXTRA_SECRET_KEY"
-        const val EXTRA_POWER_SAVER = "EXTRA_POWER_SAVER"
 
         private const val NOTIFICATION_ID = 101
         private const val CHANNEL_ID = "TG_WS_Proxy_Service_v4"
@@ -89,15 +79,6 @@ class ProxyService : Service() {
         super.onCreate()
         createNotificationChannel()
         networkMonitor = NetworkMonitor(this).apply { startMonitoring() }
-
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_SCREEN_OFF)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
-            }
-        }
-        registerReceiver(powerReceiver, filter)
 
         // Observe network state changes
         networkJob = serviceScope.launch {
@@ -128,8 +109,7 @@ class ProxyService : Service() {
                 val cfPriority = intent.getBooleanExtra(EXTRA_CFPROXY_PRIORITY, true)
                 val cfDomain = intent.getStringExtra(EXTRA_CFPROXY_DOMAIN) ?: ""
                 val secretKey = intent.getStringExtra(EXTRA_SECRET_KEY) ?: ""
-                val powerSaver = intent.getBooleanExtra(EXTRA_POWER_SAVER, true)
-                startProxy(port, ips, poolSize, cfEnabled, cfPriority, cfDomain, secretKey, powerSaver)
+                startProxy(port, ips, poolSize, cfEnabled, cfPriority, cfDomain, secretKey)
             }
             ACTION_STOP -> {
                 stopProxy()
@@ -140,7 +120,7 @@ class ProxyService : Service() {
             null -> {
                 if (lastPort > 0 && lastSecretKey.isNotEmpty()) {
                     Log.w(TAG, "Service restarted by system, re-starting proxy")
-                    startProxy(lastPort, lastIps, lastPoolSize, lastCfEnabled, lastCfPriority, lastCfDomain, lastSecretKey, lastPowerSaver)
+                    startProxy(lastPort, lastIps, lastPoolSize, lastCfEnabled, lastCfPriority, lastCfDomain, lastSecretKey)
                 } else {
                     stopSelf()
                 }
@@ -151,7 +131,7 @@ class ProxyService : Service() {
 
     private fun startProxy(port: Int, ips: String, poolSize: Int = 4,
                            cfEnabled: Boolean = true, cfPriority: Boolean = true,
-                           cfDomain: String = "", secretKey: String = "", powerSaver: Boolean = true) {
+                           cfDomain: String = "", secretKey: String = "") {
         if (_isRunning.value || startInProgress) return
         startInProgress = true
         stopInProgress = false
@@ -164,7 +144,6 @@ class ProxyService : Service() {
         lastCfPriority = cfPriority
         lastCfDomain = cfDomain
         lastSecretKey = secretKey
-        lastPowerSaver = powerSaver
         notificationStartedAtMs = System.currentTimeMillis()
         lastNotificationContent = "Запуск прокси..."
         lastNotificationAtMs = notificationStartedAtMs
@@ -187,7 +166,8 @@ class ProxyService : Service() {
         Thread({
             try {
                 NativeProxy.setNetworkOnline(networkMonitor.isOnline.value)
-                NativeProxy.setPowerSaveMode(powerSaver)
+                // Power save is permanent: always on to protect battery
+                NativeProxy.setPowerSaveMode(true)
                 NativeProxy.setPoolSize(poolSize)
                 NativeProxy.setCfProxyCacheDir(cacheDir.absolutePath)
                 NativeProxy.setCfProxyConfig(cfEnabled, cfPriority, cfDomain)
@@ -277,17 +257,6 @@ class ProxyService : Service() {
         }
     }
 
-    private fun updatePowerProfile() {
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        val isSystemPowerSave = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            pm.isPowerSaveMode
-        } else false
-        val screenOff = !pm.isInteractive
-
-        val enablePowerSave = lastPowerSaver || isSystemPowerSave || screenOff
-        NativeProxy.setPowerSaveMode(enablePowerSave)
-    }
-
     private fun isPortOpen(host: String, port: Int, timeoutMs: Int): Boolean {
         return try {
             Socket().use { socket ->
@@ -345,8 +314,7 @@ class ProxyService : Service() {
                 cfEnabled = lastCfEnabled,
                 cfPriority = lastCfPriority,
                 cfDomain = lastCfDomain,
-                secretKey = lastSecretKey,
-                powerSaver = lastPowerSaver
+                secretKey = lastSecretKey
             )
         }
     }
@@ -528,9 +496,6 @@ class ProxyService : Service() {
     }
 
     override fun onDestroy() {
-        try {
-            unregisterReceiver(powerReceiver)
-        } catch (_: Exception) {}
         networkJob?.cancel()
         networkJob = null
         networkMonitor.stopMonitoring()

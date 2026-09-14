@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.database.Cursor
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,12 +23,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -48,23 +55,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tgws.proxy.BuildConfig
-import com.tgws.proxy.R
 import com.tgws.proxy.UpdateChecker
 import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * UpdateSection — Compose UI block for the in-app updater.
- *
- * Renders a section card with:
- *   - current version + GitHub repo info
- *   - "Проверить обновления" button (manual check)
- *   - if an update is available — release notes + "Скачать и установить" button
- *   - download progress bar while downloading
- *   - auto-installs once download completes (broadcast receiver)
- *
- * The section is dropped into SettingsTab inside its own AppSectionCard.
+ * UpdateSection — Compose UI block for the in-app updater and version switcher.
  */
 @Composable
 fun UpdateSection() {
@@ -76,10 +74,14 @@ fun UpdateSection() {
     var noUpdate by remember { mutableStateOf(false) }
     var downloadId by remember { mutableLongStateOf(-1L) }
     var downloading by remember { mutableStateOf(false) }
-    var downloadedFile by remember { mutableStateOf<File?>(null) }
+    var downloadingVersionName by remember { mutableStateOf("") }
 
-    // Listen for ACTION_DOWNLOAD_COMPLETE — when our APK finishes downloading,
-    // trigger the system installer.
+    // Version switcher state
+    var loadingAllReleases by remember { mutableStateOf(false) }
+    var allReleases by remember { mutableStateOf<List<UpdateChecker.ReleaseInfo>>(emptyList()) }
+    var showAllReleases by remember { mutableStateOf(false) }
+
+    // Listen for ACTION_DOWNLOAD_COMPLETE — when APK finishes downloading, trigger installer.
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -97,7 +99,6 @@ fun UpdateSection() {
                             val uriString: String? = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
                             val file = uriString?.let { s -> File(android.net.Uri.parse(s).path ?: "") }
                             if (file?.exists() == true) {
-                                downloadedFile = file
                                 UpdateChecker.installApk(ctx2, file)
                             } else {
                                 Toast.makeText(ctx2, "Не удалось найти загруженный файл", Toast.LENGTH_SHORT).show()
@@ -109,11 +110,7 @@ fun UpdateSection() {
                 }
             }
         }
-        // On Android 13+ (API 33+) we MUST specify RECEIVER_EXPORTED or
-        // RECEIVER_NOT_EXPORTED when registering a runtime receiver —
-        // otherwise registerReceiver() throws SecurityException and crashes
-        // the app. ACTION_DOWNLOAD_COMPLETE is a system broadcast, so we
-        // use RECEIVER_NOT_EXPORTED (we don't need other apps to talk to us).
+
         val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(
@@ -132,6 +129,7 @@ fun UpdateSection() {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // ── 1. Проверка обновлений ──
         SectionHeader(
             icon = Icons.Default.SystemUpdate,
             title = "Обновления",
@@ -140,7 +138,7 @@ fun UpdateSection() {
 
         if (checking) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -159,7 +157,7 @@ fun UpdateSection() {
 
         if (downloading) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -169,7 +167,7 @@ fun UpdateSection() {
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    "Загрузка обновления…",
+                    "Загрузка версии $downloadingVersionName…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -181,7 +179,7 @@ fun UpdateSection() {
                 "У вас установлена последняя версия",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 4.dp),
+                modifier = Modifier.padding(vertical = 2.dp),
             )
         }
 
@@ -190,6 +188,7 @@ fun UpdateSection() {
                 release = r,
                 downloading = downloading,
                 onDownload = {
+                    downloadingVersionName = r.versionName
                     downloadId = UpdateChecker.downloadApk(context, r)
                     downloading = true
                 },
@@ -220,7 +219,7 @@ fun UpdateSection() {
                     }
                 },
                 enabled = !checking && !downloading,
-                modifier = Modifier.weight(1f).height(48.dp),
+                modifier = Modifier.weight(1f).height(46.dp),
                 shape = AppShapes.Large,
             ) {
                 Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
@@ -229,12 +228,248 @@ fun UpdateSection() {
             }
         }
 
+        Spacer(modifier = Modifier.height(4.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // ── 2. Виджет: Смена версии (Архив релизов) ──
+        SectionHeader(
+            icon = Icons.Default.History,
+            title = "Смена версии",
+            subtitle = "Установка других версий и откат",
+        )
+
+        OutlinedButton(
+            onClick = {
+                if (!showAllReleases && allReleases.isEmpty()) {
+                    loadingAllReleases = true
+                    scope.launch {
+                        allReleases = UpdateChecker.fetchAllReleases(context)
+                        loadingAllReleases = false
+                        showAllReleases = true
+                        if (allReleases.isEmpty()) {
+                            Toast.makeText(context, "Не удалось загрузить список версий", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else {
+                    showAllReleases = !showAllReleases
+                }
+            },
+            enabled = !loadingAllReleases && !downloading,
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+            shape = AppShapes.Large,
+        ) {
+            if (loadingAllReleases) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Загрузка списка версий…", fontWeight = FontWeight.SemiBold)
+            } else {
+                Icon(Icons.Default.History, null, Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    if (showAllReleases) "Скрыть список версий" else "Показать все доступные версии",
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = showAllReleases && allReleases.isNotEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Info notice about Android OS downgrade protection
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Откат на старую версию",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Android блокирует установку старой версии поверх новой (ошибка «Пакет недействителен»). Для установки более старой версии сначала удалите текущее приложение TG WS Proxy с телефона, а затем установите скачанный APK.",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                allReleases.forEach { rel ->
+                    ReleaseItemCard(
+                        release = rel,
+                        currentVersion = BuildConfig.VERSION_NAME,
+                        isDownloading = downloading && downloadingVersionName == rel.versionName,
+                        onDownload = {
+                            downloadingVersionName = rel.versionName
+                            downloadId = UpdateChecker.downloadApk(context, rel)
+                            downloading = true
+                            Toast.makeText(context, "Начата загрузка версии ${rel.versionName}", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            }
+        }
+
         Text(
-            "Источник: github.com/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}",
+            "Репозиторий: github.com/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
+    }
+}
+
+@Composable
+private fun ReleaseItemCard(
+    release: UpdateChecker.ReleaseInfo,
+    currentVersion: String,
+    isDownloading: Boolean,
+    onDownload: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isCurrent = release.versionName == currentVersion
+    val isOlder = UpdateChecker.isOlder(release.versionName, currentVersion)
+    val isNewer = UpdateChecker.isNewer(release.versionName, currentVersion)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShapes.Medium,
+        color = when {
+            isCurrent -> scheme.primaryContainer.copy(alpha = 0.35f)
+            else -> scheme.surfaceContainerHigh
+        },
+        border = BorderStroke(
+            0.5.dp,
+            when {
+                isCurrent -> scheme.primary.copy(alpha = 0.5f)
+                else -> scheme.outline.copy(alpha = 0.2f)
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = release.tagName,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = scheme.onSurface
+                    )
+
+                    if (isCurrent) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF2E7D32).copy(alpha = 0.18f),
+                            border = BorderStroke(0.5.dp, Color(0xFF2E7D32))
+                        ) {
+                            Text(
+                                text = "Текущая",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF2E7D32),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else if (isNewer) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF0288D1).copy(alpha = 0.18f),
+                            border = BorderStroke(0.5.dp, Color(0xFF0288D1))
+                        ) {
+                            Text(
+                                text = "Новее",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF0288D1),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else if (isOlder) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFE65100).copy(alpha = 0.15f),
+                            border = BorderStroke(0.5.dp, Color(0xFFE65100))
+                        ) {
+                            Text(
+                                text = "Откат",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFFE65100),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (release.publishedAt.isNotBlank()) {
+                    Text(
+                        text = release.publishedAt,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (release.apkSize > 0) {
+                val sizeMb = "%.1f MB".format(release.apkSize / (1024.0 * 1024.0))
+                Text(
+                    text = "Размер APK: $sizeMb",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+
+            if (release.releaseNotes.isNotBlank()) {
+                Text(
+                    text = release.releaseNotes.take(200),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 3,
+                )
+            }
+
+            Button(
+                onClick = onDownload,
+                enabled = !isDownloading,
+                modifier = Modifier.fillMaxWidth().height(42.dp),
+                shape = AppShapes.Medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isCurrent) scheme.surfaceVariant else scheme.primary,
+                    contentColor = if (isCurrent) scheme.onSurfaceVariant else scheme.onPrimary
+                )
+            ) {
+                if (isDownloading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = scheme.onPrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Загрузка…", fontSize = 13.sp)
+                } else {
+                    Icon(Icons.Default.Download, null, Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isCurrent) "Переустановить ${release.versionName}" else "Скачать ${release.versionName}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
     }
 }
 
@@ -251,7 +486,7 @@ private fun UpdateAvailableCard(
         modifier = Modifier.fillMaxWidth(),
         shape = AppShapes.Medium,
         color = scheme.primary.copy(alpha = if (isDark) 0.18f else 0.10f),
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             0.5.dp,
             scheme.primary.copy(alpha = 0.35f),
         ),
@@ -301,8 +536,6 @@ private fun UpdateAvailableCard(
     }
 }
 
-// Local helper used by UpdateSection — kept private to avoid collisions.
-// Telegram settings style: solid blue bubble + white icon.
 @Composable
 private fun SectionHeader(
     icon: ImageVector,
